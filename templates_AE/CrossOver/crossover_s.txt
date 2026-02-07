@@ -1,0 +1,21 @@
+Code Snippet 1
+```python
+{} 
+```
+Code Snippet 2
+```python
+{} 
+```
+
+Context: You are working with a bilinear algorithm for matrix multiplication represented as a fixed-rank sum of rank-1 tensors. Each rank-1 term corresponds to one scalar multiplication.
+
+Goal: Combine code from Parent A and Parent B to produce a single child candidate that maximizes correctness under the evaluator while preserving rank and tensor shapes.
+
+1. Retain original class names.
+2. Format the code in Markdown.
+3. Exclude setup/demonstration code.
+4. Retain original tensor input/output sizes.
+5. Provide full code.
+6. Must function with default settings.
+
+Return: Child candidate code with proper formatting

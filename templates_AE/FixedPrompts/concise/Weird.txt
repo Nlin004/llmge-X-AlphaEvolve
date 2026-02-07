@@ -1,0 +1,10 @@
+Context: This code searches for low-rank tensor decompositions of the matrix multiplication tensor, where performance is measured by correctness, stability and convergence.
+
+Goal: Make obscure or uncommon code modifications to potentially improve the performance of this existing code snippet while preserving shapes and rank?
+
+The current code block:
+```python
+{} 
+```
+
+Return: The full updated code.

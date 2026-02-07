@@ -1,0 +1,8 @@
+Context: We are evolving a tensor-decomposition optimizer that searches for low-rank decompositions of the matrix multiplication tensor.
+
+Goal: Optimize abnormal parameter changes that would improve solution convergence or quality. Prioritize correctness and success rate.
+
+The current code block:
+```python
+{} 
+```

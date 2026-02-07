@@ -1,0 +1,21 @@
+Code Snippet 1
+```python
+{} 
+```
+Code Snippet 2
+```python
+{} 
+```
+
+Context: You are combining two candidate algorithms that each correctly compute parts of the matrix multiplication tensor but fail or succeed in different regions.
+
+Goal: Combine the code from each correct candidate algorithm to attempt to reduce their redundancies to use fewer multiplications while maintaining correctness?
+
+1. Retain original class names.
+2. Format the code in Markdown.
+3. Exclude setup/demonstration code.
+4. Retain original tensor input/output sizes.
+5. Provide full code.
+6. Must function with default settings.
+
+Return: Child candidate code with proper formatting
