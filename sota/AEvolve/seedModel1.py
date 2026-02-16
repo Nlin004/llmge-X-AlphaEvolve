@@ -8,7 +8,7 @@ from pathlib import Path as p
 from os.path import join as pj
 
 # --- 1. Utilities for Directory Management ---
-
+# --OPTION--
 def create_save_dir(save_root: str) -> str:
     """
     Create an incrementing exp directory (exp1, exp2, ...).
@@ -37,6 +37,8 @@ def create_save_dir(save_root: str) -> str:
     return save_dir
 
 # --- 2. Core Math / Logic ---
+# --OPTION--
+
 def generate_matmul_tensor(n: int) -> jnp.ndarray:
     """Generate the matrix multiplication tensor <n, n, n>."""
     dim = n * n
@@ -48,6 +50,7 @@ def generate_matmul_tensor(n: int) -> jnp.ndarray:
             for k in range(n):
                 # Flattens indices: (row * Width + col)
                 T = T.at[i * n + j, j * n + k, k * n + i].set(1.0)
+                # T = T.at[i * n + j, j * n + k, i * n + k].set(1.0) # Fixed: encode C[k,i] instead of C[i,k] -  old code computed transpose of the result.
     return T
 
 def verify_tensor_decomposition(decomposition, n, m, p_dim, rank):
@@ -83,6 +86,7 @@ def verify_tensor_decomposition(decomposition, n, m, p_dim, rank):
     else:
         print("\n[Verification] FAILED: Constructed tensor does not match ground truth.")
         return False
+# --OPTION--
 
 # --- 3. Configuration ---
 
@@ -101,18 +105,26 @@ def get_args():
     # Reproducibility / Output
     parser.add_argument("--seed", type=int, default=42, help="random seed")
     parser.add_argument("--save_root", type=str, default="trained", help="root directory for experiment folders")
+    parser.add_argument("--save_dir", type=str, default=None, help="Explicit experiment directory (used by eval.py)") ########
     parser.add_argument("--print_every", type=int, default=1000, help="print best loss every K iterations")
 
     return parser.parse_args()
 
 # --- 4. Main Execution ---
+# --OPTION--
 
 def main():
     args = get_args()
 
     # Setup directories
-    exp_dir = create_save_dir(args.save_root)
-    print(f"Experiment Directory: {exp_dir}")
+    # exp_dir = create_save_dir(args.save_root)
+    # print(f"Experiment Directory: {exp_dir}")
+    if args.save_dir is not None:
+        exp_dir = args.save_dir
+        p(exp_dir).mkdir(parents=True, exist_ok=True)
+    else:
+        exp_dir = create_save_dir(args.save_root)
+
 
     # Derived values
     N = args.N
@@ -147,6 +159,7 @@ def main():
         # Factors shape: (dim, Rank)
         T_hat = jnp.einsum('ir,jr,kr->ijk', U, V, W)
         return jnp.sum((target_tensor - T_hat) ** 2)
+# --OPTION--
 
     # 3. Optimizer & Step
     optimizer = optax.adam(args.lr)
@@ -157,6 +170,7 @@ def main():
         updates, opt_state = optimizer.update(grads, opt_state)
         params = optax.apply_updates(params, updates)
         return params, opt_state, loss
+# --OPTION--
 
     # 4. Initialization (Batched)
     key = jax.random.PRNGKey(args.seed)
@@ -173,6 +187,7 @@ def main():
     # Create batch of params and optimizer states
     batch_params = jax.vmap(init_params)(keys) 
     batch_opt_state = jax.vmap(optimizer.init)(batch_params)
+# --OPTION--
 
     # 5. Training Loop
     print("\nStarting optimization...")
@@ -183,6 +198,7 @@ def main():
         if i % args.print_every == 0:
             best_loss = jnp.min(batch_losses)
             print(f"Step {i}: Best Loss = {best_loss:.6f}")
+# --OPTION--
 
     # 6. Post-Processing
     min_loss_idx = jnp.argmin(batch_losses)
@@ -198,6 +214,7 @@ def main():
         f.write(f"Final Loss: {final_loss}\n")
         f.write(f"Config: {vars(args)}\n")
     print(f"Results saved to {results_file}")
+# --OPTION--
 
     # 7. Verification
     if final_loss < 0.1: # Threshold to attempt verification
@@ -207,19 +224,27 @@ def main():
         # Convert to numpy for verification logic
         factors_np = (np.array(U), np.array(V), np.array(W))
         
-        is_valid = verify_tensor_decomposition(factors_np, N, N, N, R)
+
+        # UNCOMMENT IF YOU ONLY WANT TO SAVE IF YOUVE VERIFIED
+        # is_valid = verify_tensor_decomposition(factors_np, N, N, N, R)
         
-        if is_valid:
+        # if is_valid:
             # Save factors if valid
-            np.savez(pj(exp_dir, "factors.npz"), U=factors_np[0], V=factors_np[1], W=factors_np[2])
-            print(f"Valid factors saved to {pj(exp_dir, 'factors.npz')}")
+            # np.savez(pj(exp_dir, "factors.npz"), U=factors_np[0], V=factors_np[1], W=factors_np[2])
+            # print(f"Valid factors saved to {pj(exp_dir, 'factors.npz')}")
             
-            print("\nRounded Factors (U):")
-            print(jnp.round(U))
+            # print("\nRounded Factors (U):")
+            # print(jnp.round(U))
+        np.savez(pj(exp_dir, "factors.npz"), U=factors_np[0], V=factors_np[1], W=factors_np[2])
+        print(f"Factors saved to {pj(exp_dir, 'factors.npz')}")
+        
+        print("\nRounded Factors (U):")
+        print(jnp.round(U))
     else:
         print("Loss too high for valid decomposition. Try more iterations or restarts.")
 
     print("=" * 70)
+# --OPTION--
 
 if __name__ == "__main__":
     # Ensure we run from the script location context if needed

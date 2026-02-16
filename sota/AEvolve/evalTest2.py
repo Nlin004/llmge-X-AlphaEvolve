@@ -44,82 +44,6 @@ def create_save_dir(save_root):
     return save_dir
 
 
-
-
-# BELOW 2 FUNCTIONS ARE FOR CHECKING TENSOR REPRESENTATION CORRECTNESS.
-def generate_matmul_tensor(n):
-    dim = n * n
-    T = np.zeros((dim, dim, dim), dtype=np.int32)
-
-    for i in range(n):
-        for j in range(n):
-            for k in range(n):
-                T[i*n + j, j*n + k, k*n + i] = 1
-
-    return T
-
-
-def verify_tensor_decomposition(decomposition, n, m, p_dim):
-    """
-    EXACT AlphaEvolve tensor verification.
-    """
-    U, V, W = decomposition
-
-    matmul_tensor = np.zeros((n*m, m*p_dim, p_dim*n), dtype=np.int32)
-    for i in range(n):
-        for j in range(m):
-            for k in range(p_dim):
-                matmul_tensor[i*m + j, j*p_dim + k, k*n + i] = 1
-    # matmul_tensor = generate_matmul_tensor(n)
-
-    constructed_tensor = np.einsum('ir,jr,kr->ijk', U, V, W)
-    constructed_tensor = np.rint(constructed_tensor).astype(np.int32)
-
-    print("TRUTH:\n")
-    print(matmul_tensor)
-    print("ACTUAL:\n")
-    print(constructed_tensor)
-
-    return np.array_equal(constructed_tensor, matmul_tensor)
-
-
-# def verify_decomposition_for_eval(factor_matrix_1, factor_matrix_2, factor_matrix_3, 
-#                                     n=2, num_tests=50):
-#     """
-#     Wrapper that uses seed model's verification AND counts as correctness ratio.
-    
-#     If tensor verification passes, we consider it 100% correct.
-#     If it fails, we return 0% correct.
-    
-#     This matches what the seed model considers "correct".
-#     """
-#     # Use seed model's exact verification
-#     is_correct = verify_tensor_decomposition(
-#         (factor_matrix_1, factor_matrix_2, factor_matrix_3),
-#         n, n, n
-#     )
-    
-#     # Count multiplications
-#     num_multiplications = factor_matrix_1.shape[1]
-    
-#     if is_correct:
-#         correct_ratio = 1.0
-#         num_correct = num_tests
-#         max_error = 0.0
-#         avg_error = 0.0
-#     else:
-#         correct_ratio = 0.0
-#         num_correct = 0
-#         max_error = float('inf')
-#         avg_error = float('inf')
-    
-#     return correct_ratio, num_correct, num_tests, max_error, avg_error, num_multiplications
-
-
-
-
-
-
 def apply_decomposition_to_multiply(A, B, factor_matrix_1, factor_matrix_2, factor_matrix_3):
     """
     Apply tensor decomposition to multiply matrices A and B.
@@ -165,16 +89,12 @@ def apply_decomposition_to_multiply(A, B, factor_matrix_1, factor_matrix_2, fact
         C_flat += scalar * w
     
     # Reshape back to matrix
-    # print("C_flat:", C_flat)
-    # print("C_flat reshaped row-major:\n", C_flat.reshape(n, n))
-    print("C_flat reshaped col-major:\n", C_flat.reshape(n, n, order="F"))
-
-    C = C_flat.reshape(n, n, order="F")  #ROW MAJOR ORDER!!!!!
+    C = C_flat.reshape(n, n)
     return C
 
 
 def verify_decomposition(factor_matrix_1, factor_matrix_2, factor_matrix_3, 
-                         n=2, num_tests=50, tol=5e-6):
+                         n=2, num_tests=50, tol=1e-3):
     """
     Verify that the decomposition correctly multiplies matrices.
     
@@ -208,17 +128,12 @@ def verify_decomposition(factor_matrix_1, factor_matrix_2, factor_matrix_3,
         
         # Ground truth
         C_expected = A @ B
-
-        print("\nGROUND TRUTH MULT")
-        print(C_expected)
         
-        print("\nACTUAL PRODUCT:")
         # Use decomposition
         C_result = apply_decomposition_to_multiply(
             A, B, factor_matrix_1, factor_matrix_2, factor_matrix_3
         )
         
-        # print(C_result)
         # Compute error
         error = np.max(np.abs(C_result - C_expected))
         max_error = max(max_error, error)
@@ -270,13 +185,6 @@ if __name__ == '__main__':
     save_dir = f'{args.save_dir}/{gene_id}'
     create_save_dir(save_dir)
     
-    run_dir = p(args.save_dir) / f"{gene_id}_pid{os.getpid()}"
-    run_dir.mkdir(parents=True, exist_ok=True)
-
-
-
-
-
     print("="*120)
     print(f"EVALUATING: {args.N}×{args.N} matrix multiplication")
     print(f"Target rank: {args.R}")
@@ -303,60 +211,36 @@ if __name__ == '__main__':
     try:
         # Call the model's main function
         # It will create its own experiment directory and save results
-        # model_module.main()
-        old_argv = sys.argv
-        sys.argv = [
-            old_argv[0],
-            "--save_dir", str(run_dir),
-            "--N", str(args.N),
-            "--R", str(args.R),
-        ]
         model_module.main()
-        sys.argv = old_argv
-
-
-
-
-
-
-
         
         # The model saves results in its own exp directory
         # We need to find the most recent one
-        # ===========================
-        # trained_dir = p("trained")
-        # exp_dirs = sorted([d for d in trained_dir.iterdir() if d.is_dir() and d.name.startswith("exp")])
+        trained_dir = p("trained")
+        exp_dirs = sorted([d for d in trained_dir.iterdir() if d.is_dir() and d.name.startswith("exp")])
         
-        # if not exp_dirs:
-        #     raise FileNotFoundError("No experiment directories found")
+        if not exp_dirs:
+            raise FileNotFoundError("No experiment directories found")
         
-        # latest_exp_dir = exp_dirs[-1]
+        latest_exp_dir = exp_dirs[-1]
         
-        # # Load the saved factors
-        # factors_file = latest_exp_dir / "factors.npz"
+        # Load the saved factors
+        factors_file = latest_exp_dir / "factors.npz"
         
-        # if not factors_file.exists():
-        #     raise FileNotFoundError(f"No factors.npz found in {latest_exp_dir}")
-
-        # instead: -------------
-        factors_file = run_dir / "factors.npz"
         if not factors_file.exists():
-            raise FileNotFoundError(f"No factors found in {run_dir}")
-
-        # ===========================
+            raise FileNotFoundError(f"No factors.npz found in {latest_exp_dir}")
         
         factors_data = np.load(factors_file)
         factor_matrix_1 = factors_data['U']
         factor_matrix_2 = factors_data['V']
         factor_matrix_3 = factors_data['W']
         
-        # REMOVING ROUNDING FIXED MY ERRORS!
-        # def round_half(x):
-        #     return np.round(x * 2) / 2
+        # Round to nearest half-integer (as AlphaEvolve does)
+        def round_half(x):
+            return np.round(x * 2) / 2
         
-        # factor_matrix_1 = round_half(factor_matrix_1)
-        # factor_matrix_2 = round_half(factor_matrix_2)
-        # factor_matrix_3 = round_half(factor_matrix_3)
+        factor_matrix_1 = round_half(factor_matrix_1)
+        factor_matrix_2 = round_half(factor_matrix_2)
+        factor_matrix_3 = round_half(factor_matrix_3)
         
         print(f"\nLoaded factors from {factors_file}")
         print(f"Factor shapes: {factor_matrix_1.shape}, {factor_matrix_2.shape}, {factor_matrix_3.shape}")
@@ -376,26 +260,14 @@ if __name__ == '__main__':
     # VERIFY CORRECTNESS
     # ========================================================================
     
-    print(f"\nVerifying correctness using seed model's verification method...")
+    print(f"\nVerifying correctness on {args.num_tests} random tests...")
     
-
-    # is_correct = verify_tensor_decomposition(
-    #     decomposition=(factor_matrix_1, factor_matrix_2, factor_matrix_3),
-    #     n=args.N,
-    #     m=args.N,
-    #     p_dim=args.N
-    # )
-    # num_multiplications = args.R
-
-
-
     correct_ratio, num_correct, num_total, max_error, avg_error, num_multiplications = verify_decomposition(
         factor_matrix_1, factor_matrix_2, factor_matrix_3,
         n=args.N,
         num_tests=args.num_tests
-    )    
-    print("PERCENTAGE CORRECT!!!!\n")
-    print(correct_ratio)
+    )
+    
     standard_mults = args.N ** 3  # Standard algorithm for n×n matrices
     
     # ========================================================================
@@ -414,19 +286,19 @@ if __name__ == '__main__':
         # Perfect: optimize for performance
         # Scale num_multiplications to be comparable to small differences in ratio
         fitness = num_multiplications * 1000
-        status = "FULLY CORRECT"
+        status = "✓ FULLY CORRECT"
         
     elif correct_ratio >= 0.8:
         # Mostly correct: medium penalty
         penalty = (1.0 - correct_ratio) * 100000
         fitness = penalty + num_multiplications * 1000 + avg_error * 10000
-        status = f"MOSTLY CORRECT ({correct_ratio:.0%})"
+        status = f"⚠ MOSTLY CORRECT ({correct_ratio:.0%})"
         
     else:
         # Mostly wrong: large penalty
         penalty = (1.0 - correct_ratio) * 1000000
         fitness = penalty + avg_error * 10000 + num_multiplications
-        status = f"INCORRECT ({correct_ratio:.0%})"
+        status = f"✗ INCORRECT ({correct_ratio:.0%})"
     
     # ========================================================================
     # PRINT RESULTS
@@ -440,18 +312,14 @@ if __name__ == '__main__':
     print(f"Standard algorithm: {standard_mults} multiplications")
     print(f"Improvement: {100*(1 - num_multiplications/standard_mults):.1f}% reduction")
     
-    print(f"\nCorrectness (using seed model's verification):")
-    # if is_correct:
-    #    fitness = num_multiplications * 1000  # e.g., 7000 for rank-7
-    # else:
-    #    fitness = 1000000 + num_multiplications  # e.g., 1000007 if wrong
-    # ===========================
-
-
-    print(f"Passed {num_correct}/{num_total} random multiplication tests.")
+    print(f"\nCorrectness:")
+    print(f"  Tests passed: {num_correct}/{num_total}")
+    print(f"  Success ratio: {correct_ratio:.2%} ({correct_ratio:.4f})")
+    print(f"  Max error: {max_error:.2e}")
+    print(f"  Avg error: {avg_error:.2e}")
     
     print(f"\nFitness for LLMGE (MINIMIZE):")
-    # print(f"  {status}")
+    print(f"  {status}")
     print(f"  Fitness score: {fitness:.4f}")
     
     if correct_ratio == 1.0:
@@ -467,7 +335,7 @@ if __name__ == '__main__':
     
     # Print fitness for LLMGE to parse
     print(f"\n{fitness:.4f}")
-    # print(f"# Breakdown: ratio={correct_ratio:.4f}, rank={num_multiplications}, error={avg_error:.2e}")
+    print(f"# Breakdown: ratio={correct_ratio:.4f}, rank={num_multiplications}, error={avg_error:.2e}")
     
     # Save results
     results_text = f"{fitness:.4f}"

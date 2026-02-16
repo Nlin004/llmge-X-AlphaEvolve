@@ -2,6 +2,7 @@ __pycache__/
 xXx*
 network_xXx*
 sota/ExquisiteNetV2/cifar-10-batches-py
+sota/AEvolve/trained/*
 *.bmp
 build/
 tests/*/outputs
