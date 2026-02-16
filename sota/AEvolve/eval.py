@@ -47,6 +47,9 @@ def create_save_dir(save_root):
 
 
 # BELOW 2 FUNCTIONS ARE FOR CHECKING TENSOR REPRESENTATION CORRECTNESS.
+
+# ===================== Helper to generate the matmul tensor =====================
+
 def generate_matmul_tensor(n):
     dim = n * n
     T = np.zeros((dim, dim, dim), dtype=np.int32)
@@ -58,6 +61,7 @@ def generate_matmul_tensor(n):
 
     return T
 
+# ===================== VERIFICATION VIA *TENSOR DECOMP* CORRECTNESS: =====================
 
 def verify_tensor_decomposition(decomposition, n, m, p_dim):
     """
@@ -83,42 +87,11 @@ def verify_tensor_decomposition(decomposition, n, m, p_dim):
     return np.array_equal(constructed_tensor, matmul_tensor)
 
 
-# def verify_decomposition_for_eval(factor_matrix_1, factor_matrix_2, factor_matrix_3, 
-#                                     n=2, num_tests=50):
-#     """
-#     Wrapper that uses seed model's verification AND counts as correctness ratio.
-    
-#     If tensor verification passes, we consider it 100% correct.
-#     If it fails, we return 0% correct.
-    
-#     This matches what the seed model considers "correct".
-#     """
-#     # Use seed model's exact verification
-#     is_correct = verify_tensor_decomposition(
-#         (factor_matrix_1, factor_matrix_2, factor_matrix_3),
-#         n, n, n
-#     )
-    
-#     # Count multiplications
-#     num_multiplications = factor_matrix_1.shape[1]
-    
-#     if is_correct:
-#         correct_ratio = 1.0
-#         num_correct = num_tests
-#         max_error = 0.0
-#         avg_error = 0.0
-#     else:
-#         correct_ratio = 0.0
-#         num_correct = 0
-#         max_error = float('inf')
-#         avg_error = float('inf')
-    
-#     return correct_ratio, num_correct, num_tests, max_error, avg_error, num_multiplications
 
 
 
 
-
+# ===================== HELPER FUNCTION TO CONVERT TENSOR FACTORS TO MULT: =====================
 
 def apply_decomposition_to_multiply(A, B, factor_matrix_1, factor_matrix_2, factor_matrix_3):
     """
@@ -172,7 +145,7 @@ def apply_decomposition_to_multiply(A, B, factor_matrix_1, factor_matrix_2, fact
     C = C_flat.reshape(n, n, order="F")  #ROW MAJOR ORDER!!!!!
     return C
 
-
+# ===================== VERIFICATION VIA RANDOM MULTIPLICATION TESTS: =====================
 def verify_decomposition(factor_matrix_1, factor_matrix_2, factor_matrix_3, 
                          n=2, num_tests=50, tol=5e-6):
     """
@@ -378,7 +351,7 @@ if __name__ == '__main__':
     
     print(f"\nVerifying correctness using seed model's verification method...")
     
-
+    # ============= USE THIS FOR VERIFICATION VIA TENSOR! ============
     # is_correct = verify_tensor_decomposition(
     #     decomposition=(factor_matrix_1, factor_matrix_2, factor_matrix_3),
     #     n=args.N,
@@ -388,14 +361,14 @@ if __name__ == '__main__':
     # num_multiplications = args.R
 
 
-
+    # ============= USE THIS FOR VERIFICATION VIA RANDOM MATRIX MULT CHECKS! ============
     correct_ratio, num_correct, num_total, max_error, avg_error, num_multiplications = verify_decomposition(
         factor_matrix_1, factor_matrix_2, factor_matrix_3,
         n=args.N,
         num_tests=args.num_tests
     )    
-    print("PERCENTAGE CORRECT!!!!\n")
-    print(correct_ratio)
+    # print("PERCENTAGE CORRECT!!!!\n")
+    # print(correct_ratio)
     standard_mults = args.N ** 3  # Standard algorithm for n×n matrices
     
     # ========================================================================
@@ -440,15 +413,16 @@ if __name__ == '__main__':
     print(f"Standard algorithm: {standard_mults} multiplications")
     print(f"Improvement: {100*(1 - num_multiplications/standard_mults):.1f}% reduction")
     
-    print(f"\nCorrectness (using seed model's verification):")
+    # ===========================
+    # print(f"\nCorrectness (using seed model's verification):")
     # if is_correct:
     #    fitness = num_multiplications * 1000  # e.g., 7000 for rank-7
     # else:
     #    fitness = 1000000 + num_multiplications  # e.g., 1000007 if wrong
     # ===========================
-
-
-    print(f"Passed {num_correct}/{num_total} random multiplication tests.")
+    print(f"\nCorrectness (via random mult tests):")
+    print(f"Passed {num_correct}/{num_total} tests.")
+    # ============================
     
     print(f"\nFitness for LLMGE (MINIMIZE):")
     # print(f"  {status}")
