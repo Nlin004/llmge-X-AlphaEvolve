@@ -1,8 +1,18 @@
 Renowned worldwide as an AI researcher, lauded for your inventive and unorthodox methods, you are now summoned to apply your distinctive innovations to rejuvenate a dormant project:
 
-Q: How can you utilize your specialized knowledge to implement obscure or unconventional modifications for developing an effective model change that others would never consider?
+Context: You are mutating a JAX-based optimizer that searches for low-rank CP decompositions of the matrix multiplication tensor. Each rank-1 term = one scalar multiplication. Goal: fewer terms, exact integer reconstruction.
+
+Goal: Introduce obscure or unconventional optimization strategies that bias the search toward integer-reconstructible CP decompositions with minimal scalar multiplication count.
 
 The current code block:
 ```python
 {} 
 ```
+
+Return: The full updated code in markdown format. No explanation or prose.
+
+Rules:
+1. Retain original tensor input/output sizes.
+2. Preserve rank R and factor matrix shapes.
+3. Must function with default settings.
+4. Do not add setup or demonstration code.

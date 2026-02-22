@@ -1,3 +1,5 @@
+Context: You are combining two parent algorithms that each attempt a CP decomposition of the matrix multiplication tensor. Each rank-1 term is one scalar multiplication. Combine structure, initialization, or loss formulation from both parents to produce a child that is more likely to find an exact integer-roundable solution than either parent alone.
+
 Code Snippet 1
 ```python
 {} 
@@ -6,8 +8,6 @@ Code Snippet 2
 ```python
 {} 
 ```
-
-Context: You are working with a bilinear algorithm for matrix multiplication represented as a fixed-rank sum of rank-1 tensors. Each rank-1 term corresponds to one scalar multiplication.
 
 Goal: Combine code from Parent A and Parent B to produce a single child candidate that maximizes correctness under the evaluator while preserving rank and tensor shapes.
 

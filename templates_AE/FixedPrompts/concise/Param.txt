@@ -1,6 +1,10 @@
+Context: You are mutating a JAX-based optimizer that finds low-rank CP decompositions of the matrix multiplication tensor. Each rank-1 term is one scalar multiplication.
+
 Goal: What modifications to default parameters or hyperparameters could potentially enhance the performance of this existing code snippet?
 
 The current code block:
 ```python
 {} 
 ```
+
+Return: ONLY the full updated code block in markdown format. No explanation start with ```python and end with ```.

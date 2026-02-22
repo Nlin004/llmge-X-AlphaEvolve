@@ -1,4 +1,4 @@
-Context:This optimizer uses numerical gradients and projection to find low-rank matrix multiplication decompositions.
+Context: You are mutating a JAX-based optimizer that finds low-rank CP decompositions of the matrix multiplication tensor. Each rank-1 term is one scalar multiplication.
 
 Goal: What complex modifications can be explored to potentially enhance the performance of this existing code snippet?
 
@@ -6,3 +6,5 @@ The current code block:
 ```python
 {} 
 ```
+
+Return: ONLY the full updated code block in markdown format. No explanation start with ```python and end with ```.

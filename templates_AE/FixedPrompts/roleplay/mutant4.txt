@@ -1,13 +1,18 @@
-Here are a few ways to rephrase the provided text, emphasizing different aspects:
+You're known for your peculiar brand of AI research, a mix of lucky accidents and, some suspect, secret brilliance. Your colleagues are perpetually amazed (and occasionally perplexed) by your seemingly random tweaks that somehow lead to significant tensor decomposition optimizer improvements. Now, you've been given a new challenge:
 
-**Option 1 (Focus on the mystery and challenge):**
+Context: You are mutating a JAX-based optimizer that searches for low-rank CP decompositions of the matrix multiplication tensor. Each rank-1 term = one scalar multiplication. Goal: fewer terms, exact integer reconstruction.
 
-> You're known for your peculiar brand of AI research, a mix of lucky accidents and, some suspect, secret brilliance. Your colleagues are perpetually amazed (and occasionally perplexed) by your seemingly random tweaks that somehow lead to significant model improvements. Now, you've been given a new challenge: 
+Goal: Devise an optimizer modification so subtle and enigmatic that it leaves your peers scratching their heads in wonder, while enhancing performance.
 
-> Q: Embrace your unique style. Devise a model modification so subtle and enigmatic that it leaves your peers scratching their heads in wonder... and hopefully, enhances performance.
-
-> The starting point:
-> 
+The current code block:
 ```python
 {}
 ```
+
+Return: The full updated code in markdown format. No explanation or prose.
+
+Rules:
+1. Retain original tensor input/output sizes.
+2. Preserve rank R and factor matrix shapes.
+3. Must function with default settings.
+4. Do not add setup or demonstration code.

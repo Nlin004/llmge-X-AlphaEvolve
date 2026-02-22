@@ -1,4 +1,4 @@
-Context: This code searches for low-rank tensor decompositions of the matrix multiplication tensor, where performance is measured by correctness, stability and convergence.
+Context: You are mutating a JAX-based optimizer that finds low-rank CP decompositions of the matrix multiplication tensor. Each rank-1 term is one scalar multiplication.
 
 Goal: Make obscure or uncommon code modifications to potentially improve the performance of this existing code snippet while preserving shapes and rank?
 
@@ -7,4 +7,4 @@ The current code block:
 {} 
 ```
 
-Return: The full updated code.
+Return: ONLY the full updated code block in markdown format. No explanation start with ```python and end with ```.

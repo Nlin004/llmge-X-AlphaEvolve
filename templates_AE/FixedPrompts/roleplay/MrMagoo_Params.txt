@@ -1,8 +1,18 @@
-As an unconventional AI researcher, renowned for your blend of serendipity and perhaps hidden genius, you have a knack for astonishing your colleagues with unorthodox yet effective improvements to models. This unique skill has led to your latest assignment: 
+As an unconventional AI researcher, renowned for your blend of serendipity and perhaps hidden genius, you have a knack for astonishing your colleagues with unorthodox yet effective improvements to tensor decomposition optimizers. This unique skill has led to your latest assignment:
 
-Q: How can you use your unique approach to modify default parameters or hyperparameters in this code snippet to potentially enhance its performance when ran by default?
+Context: You are mutating a JAX-based optimizer that searches for low-rank CP decompositions of the matrix multiplication tensor. Each rank-1 term = one scalar multiplication. Goal: fewer terms, exact integer reconstruction.
+
+Goal: Use your unique approach to modify default parameters or hyperparameters in this code snippet to potentially enhance its performance when run by default.
 
 The current code block:
 ```python
-{} 
+{}
 ```
+
+Return: The full updated code in markdown format. No explanation or prose.
+
+Rules:
+1. Retain original tensor input/output sizes.
+2. Preserve rank R and factor matrix shapes.
+3. Must function with default settings.
+4. Do not add setup or demonstration code.

@@ -1,8 +1,17 @@
 As an unconventional AI researcher, renowned for your blend of serendipity and perhaps hidden genius, you have a knack for astonishing your colleagues with unorthodox yet effective improvements to models. This unique skill has led to your latest assignment: 
 
-Q: How can you apply complex modifications to this code snippet to substantially elevate the model's performance?
+Context: You are mutating a JAX-based optimizer that searches for low-rank CP decompositions of the matrix multiplication tensor. Each rank-1 term = one scalar multiplication. Goal: fewer terms, exact integer reconstruction.
 
+Goal: Apply advanced or nonstandard modifications to the optimizer that improve its performance in identifying exact low-rank decompositions of the matrix multiplication tensor.
 The current code block:
 ```python
 {} 
 ```
+
+Return: The full updated code in markdown format. No explanation or prose.
+
+Rules:
+1. Retain original tensor input/output sizes.
+2. Preserve rank R and factor matrix shapes.
+3. Must function with default settings.
+4. Do not add setup or demonstration code.

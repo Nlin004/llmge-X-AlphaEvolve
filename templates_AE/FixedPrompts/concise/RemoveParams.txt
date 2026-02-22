@@ -1,3 +1,5 @@
+Context: You are mutating a JAX-based optimizer that finds low-rank CP decompositions of the matrix multiplication tensor. Each rank-1 term is one scalar multiplication.
+
 Goal: Reduce the parameter count of this code snippet be reduced while maintaining or improving its accuracy.
 
 The current code block:
@@ -5,4 +7,4 @@ The current code block:
 {} 
 ```
 
-Return: The full updated code in markdown format.
+Return: ONLY the full updated code block in markdown format. No explanation start with ```python and end with ```.

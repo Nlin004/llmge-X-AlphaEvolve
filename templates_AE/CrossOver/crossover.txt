@@ -1,3 +1,5 @@
+Context: You are combining two parent algorithms that each attempt a CP decomposition of the matrix multiplication tensor. Each rank-1 term is one scalar multiplication. Combine structure, initialization, or loss formulation from both parents to produce a child that is more likely to find an exact integer-roundable solution than either parent alone.
+
 Code Snippet 1
 ```python
 {} 
@@ -6,8 +8,6 @@ Code Snippet 2
 ```python
 {} 
 ```
-
-Context: You are combining two candidate algorithms that each correctly compute parts of the matrix multiplication tensor but fail or succeed in different regions.
 
 Goal: Combine the code from each correct candidate algorithm to attempt to reduce their redundancies to use fewer multiplications while maintaining correctness?
 
