@@ -94,13 +94,13 @@ def get_args():
     parser = argparse.ArgumentParser()
 
     # Core problem config
-    parser.add_argument("--N", type=int, default=2, help="matrix size N (tensor dimension uses N*N)")
-    parser.add_argument("--R", type=int, default=7, help="rank for CP decomposition")
+    parser.add_argument("--N", type=int, default=3, help="matrix size N (tensor dimension uses N*N)")
+    parser.add_argument("--R", type=int, default=23, help="rank for CP decomposition")
 
     # Optimization config
     parser.add_argument("--lr", type=float, default=0.01, help="learning rate")
-    parser.add_argument("--iterations", type=int, default=5000, help="number of optimization steps")
-    parser.add_argument("--batch_size", type=int, default=100, help="number of parallel random restarts")
+    parser.add_argument("--iterations", type=int, default=10000, help="number of optimization steps")
+    parser.add_argument("--batch_size", type=int, default=250, help="number of parallel random restarts")
 
     # Reproducibility / Output
     parser.add_argument("--seed", type=int, default=42, help="random seed")
@@ -110,6 +110,14 @@ def get_args():
 
     return parser.parse_args()
 
+
+def resolve_exp_dir(args):
+    if args.save_dir is not None:
+        exp_dir = p(args.save_dir).resolve()
+        exp_dir.mkdir(parents=True, exist_ok=True)
+        return exp_dir
+    else:
+        return p(create_save_dir(args.save_root)).resolve()
 # --- 4. Main Execution ---
 # --OPTION--
 
@@ -119,17 +127,27 @@ def main():
     # Setup directories
     # exp_dir = create_save_dir(args.save_root)
     # print(f"Experiment Directory: {exp_dir}")
-    if args.save_dir is not None:
-        exp_dir = args.save_dir
-        p(exp_dir).mkdir(parents=True, exist_ok=True)
-    else:
-        exp_dir = create_save_dir(args.save_root)
+    # if args.save_dir is not None:
+    #     exp_dir = args.save_dir
+    #     p(exp_dir).mkdir(parents=True, exist_ok=True)
+    # else:
+    #     exp_dir = create_save_dir(args.save_root)
 
+    exp_dir = resolve_exp_dir(args)
 
     # Derived values
     N = args.N
     dim = N * N
     R = args.R
+
+    # Standard algorithm rank
+    standard_rank = N ** 3
+
+    # Start with target rank, try to go lower
+    if args.R is not None:
+        start_rank = args.R
+    else:
+        start_rank = standard_rank - 1  # Start just below standard
 
     # Device info
     try:
@@ -248,6 +266,6 @@ def main():
 
 if __name__ == "__main__":
     # Ensure we run from the script location context if needed
-    script_directory = p(__file__).parent.resolve()
-    os.chdir(script_directory)
+    # script_directory = p(__file__).parent.resolve()
+    # os.chdir(script_directory)
     main()

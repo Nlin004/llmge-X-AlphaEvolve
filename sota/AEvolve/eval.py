@@ -209,7 +209,7 @@ def verify_decomposition(factor_matrix_1, factor_matrix_2, factor_matrix_3,
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--model', type=str, default="seedModel1", help="model file")
-    parser.add_argument('--save_dir', type=str, default="trained", help="path where results will be saved")
+    parser.add_argument('--save_dir', type=str, default="trained", help="path where results (the tensor factors) will be saved after running the model")
     parser.add_argument('--random_seed', type=int, default=42, help="random seed")
     parser.add_argument('--variant_dir', type=str, default='models', help="directory where models are written by LLM-GE")
     
@@ -243,7 +243,8 @@ if __name__ == '__main__':
     save_dir = f'{args.save_dir}/{gene_id}'
     create_save_dir(save_dir)
     
-    run_dir = p(args.save_dir) / f"{gene_id}_pid{os.getpid()}"
+    # run_dir = p(args.save_dir) / f"{gene_id}_pid{os.getpid()}"
+    run_dir = p(args.save_dir).resolve() / f"{gene_id}_pid{os.getpid()}"
     run_dir.mkdir(parents=True, exist_ok=True)
 
 
@@ -273,6 +274,9 @@ if __name__ == '__main__':
     
     # Run the model's main function
     # The seed model has a main() function that we can call
+
+    current_dir = os.getcwd()
+    print(f"Current directory before model.main(): {current_dir}")
     try:
         # Call the model's main function
         # It will create its own experiment directory and save results
@@ -284,8 +288,27 @@ if __name__ == '__main__':
             "--N", str(args.N),
             "--R", str(args.R),
         ]
+
+
+        # Make sure we're in the right directory
+        os.chdir(script_directory)
+
+        
         model_module.main()
         sys.argv = old_argv
+        # # Temporarily override __file__ in the model module so it doesn't change directory
+        # if hasattr(model_module, '__file__'):
+        #     original_model_file = model_module.__file__
+        #     model_module.__file__ = str(script_directory / 'dummy.py')
+
+        # try:
+        #     model_module.main()
+        # finally:
+        #     sys.argv = old_argv
+        #     # Restore working directory in case model changed it
+        #     os.chdir(script_directory)
+        #     if hasattr(model_module, '__file__'):
+        #         model_module.__file__ = original_model_file
 
 
 
@@ -334,16 +357,41 @@ if __name__ == '__main__':
         print(f"\nLoaded factors from {factors_file}")
         print(f"Factor shapes: {factor_matrix_1.shape}, {factor_matrix_2.shape}, {factor_matrix_3.shape}")
         
+    # except Exception as e:
+    #     print(f"\nERROR loading factors: {e}")
+    #     print("Using dummy factors for demonstration...")
+        
+    #     # Create dummy factors (standard algorithm)
+    #     dim = args.N * args.N
+    #     rank = args.R
+    #     factor_matrix_1 = np.random.randn(dim, rank)
+    #     factor_matrix_2 = np.random.randn(dim, rank)
+    #     factor_matrix_3 = np.random.randn(dim, rank)
+
+
+
     except Exception as e:
         print(f"\nERROR loading factors: {e}")
-        print("Using dummy factors for demonstration...")
+        print(f"Looked for factors at: {factors_file}")
+        print(f"run_dir contents:")
+        if run_dir.exists():
+            print(list(run_dir.iterdir()))
+        else:
+            print(f"  run_dir does not exist: {run_dir}")
         
-        # Create dummy factors (standard algorithm)
-        dim = args.N * args.N
-        rank = args.R
-        factor_matrix_1 = np.random.randn(dim, rank)
-        factor_matrix_2 = np.random.randn(dim, rank)
-        factor_matrix_3 = np.random.randn(dim, rank)
+        # Also check if model saved to default location
+        print(f"\nChecking default 'trained' directory:")
+        trained_dir = p("trained")
+        if trained_dir.exists():
+            exp_dirs = sorted([d for d in trained_dir.iterdir() if d.is_dir()])
+            print(f"  Found directories: {exp_dirs}")
+            if exp_dirs:
+                latest = exp_dirs[-1]
+                print(f"  Latest: {latest}")
+                if (latest / "factors.npz").exists():
+                    print(f"  [GOOD] factors.npz exists in {latest}")
+        
+
     
     # ========================================================================
     # VERIFY CORRECTNESS
@@ -374,7 +422,7 @@ if __name__ == '__main__':
     # ========================================================================
     # CALCULATE FITNESS
     # ========================================================================
-    
+    ONE_FITNESS = False
     # Fitness has two objectives:
     # 1. Maximize correctness_ratio (0.0 to 1.0)
     # 2. Minimize num_multiplications
@@ -382,25 +430,29 @@ if __name__ == '__main__':
     # We'll use a weighted combination:
     # - Correctness is most important (huge penalty if wrong)
     # - Number of multiplications matters once correct
-    
-    if correct_ratio == 1.0:
-        # Perfect: optimize for performance
-        # Scale num_multiplications to be comparable to small differences in ratio
-        fitness = num_multiplications * 1000
-        status = "FULLY CORRECT"
-        
-    elif correct_ratio >= 0.8:
-        # Mostly correct: medium penalty
-        penalty = (1.0 - correct_ratio) * 100000
-        fitness = penalty + num_multiplications * 1000 + avg_error * 10000
-        status = f"MOSTLY CORRECT ({correct_ratio:.0%})"
-        
+    if ONE_FITNESS:
+        if correct_ratio == 1.0:
+            # Perfect: optimize for performance
+            # Scale num_multiplications to be comparable to small differences in ratio
+            fitness = num_multiplications * 1000
+            status = "FULLY CORRECT"
+            
+        elif correct_ratio >= 0.8:
+            # Mostly correct: medium penalty
+            penalty = (1.0 - correct_ratio) * 100000
+            fitness = penalty + num_multiplications * 1000 + avg_error * 10000
+            status = f"MOSTLY CORRECT ({correct_ratio:.0%})"
+            
+        else:
+            # Mostly wrong: large penalty
+            penalty = (1.0 - correct_ratio) * 1000000
+            fitness = penalty + avg_error * 10000 + num_multiplications
+            status = f"INCORRECT ({correct_ratio:.0%})"
     else:
-        # Mostly wrong: large penalty
-        penalty = (1.0 - correct_ratio) * 1000000
-        fitness = penalty + avg_error * 10000 + num_multiplications
-        status = f"INCORRECT ({correct_ratio:.0%})"
-    
+        # Multi-objective: return tuple (lower is better for both)
+        fitness_1 = correct_ratio  # Maximize correct problems solved (1.0 = perfect, 0.0 = all wrong)
+        fitness_2 = num_multiplications  # Minimize rank (7 = target)
+        fitness = (fitness_1, fitness_2)
     # ========================================================================
     # PRINT RESULTS
     # ========================================================================
@@ -425,26 +477,30 @@ if __name__ == '__main__':
     # ============================
     
     print(f"\nFitness for LLMGE (MINIMIZE):")
-    # print(f"  {status}")
-    print(f"  Fitness score: {fitness:.4f}")
     
-    if correct_ratio == 1.0:
-        print(f"  Breakdown: {num_multiplications} mults × 1000")
-    elif correct_ratio >= 0.8:
-        penalty = (1.0 - correct_ratio) * 100000
-        print(f"  Breakdown: {penalty:.2f} (penalty) + {num_multiplications * 1000} (mults) + {avg_error * 10000:.2f} (error)")
-    else:
-        penalty = (1.0 - correct_ratio) * 1000000
-        print(f"  Breakdown: {penalty:.2f} (penalty) + {avg_error * 10000:.2f} (error) + {num_multiplications} (mults)")
-    
+    if ONE_FITNESS:
+        if correct_ratio == 1.0:
+            print(f"  Breakdown: {num_multiplications} mults × 1000")
+        elif correct_ratio >= 0.8:
+            penalty = (1.0 - correct_ratio) * 100000
+            print(f"  Breakdown: {penalty:.2f} (penalty) + {num_multiplications * 1000} (mults) + {avg_error * 10000:.2f} (error)")
+        else:
+            penalty = (1.0 - correct_ratio) * 1000000
+            print(f"  Breakdown: {penalty:.2f} (penalty) + {avg_error * 10000:.2f} (error) + {num_multiplications} (mults)")
+
+        print(f"\n{fitness:.4f}")
+        # print(f"# Breakdown: ratio={correct_ratio:.4f}, rank={num_multiplications}, error={avg_error:.2e}")
+        
+        # Save results
+        results_text = f"{fitness:.4f}"
+    else: 
+        print(f"\nCorrectness fitness (lower is better): {fitness_1:.4f}")
+        print(f"Multiplication fitness (lower is better): {fitness_2}")
+        results_text = f"{fitness_1:.4f}, {fitness_2}"
+
+        
     print("="*120)
-    
-    # Print fitness for LLMGE to parse
-    print(f"\n{fitness:.4f}")
-    # print(f"# Breakdown: ratio={correct_ratio:.4f}, rank={num_multiplications}, error={avg_error:.2e}")
-    
-    # Save results
-    results_text = f"{fitness:.4f}"
+
     filename = os.path.abspath(f'results/{gene_id}_results.txt')
     dir_path = os.path.dirname(filename)
     os.makedirs(dir_path, exist_ok=True)

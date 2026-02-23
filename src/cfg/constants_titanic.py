@@ -15,7 +15,7 @@ MODEL = "model"
 # Path to local LLM model path used by server.py for LLM operations
 MODEL_PATH = "/storage/ice-shared/vip-vvk/llm_storage/meta-llama/Llama-3.3-70B-Instruct/"
 VARIANT_DIR = os.path.join(SOTA_ROOT, "models/llmge_models") 
-TRAIN_FILE = os.path.join(SOTA_ROOT, "eval3.py") 
+TRAIN_FILE = os.path.join(SOTA_ROOT, "eval.py") 
 
 # TODO: Adding this here, I think it's supposed to parse from the command line
 OUTPUT_DIR = "aevolve_test"
@@ -61,7 +61,7 @@ EVAL_RUNLINE = "uv run python {} --model {} --variant_dir {VARIANT_DIR}"
 """
 Evolution Constants/Params
 """
-FITNESS_WEIGHTS = (-1.0,)
+FITNESS_WEIGHTS = (1.0, -1.0)
 INVALID_FITNESS_MAX = tuple([float(x*np.inf*-1) for x in FITNESS_WEIGHTS])
 PLACEHOLDER_FITNESS = tuple([int(x*9999999999*-1) for x in FITNESS_WEIGHTS])
 NUM_EOT_ELITES = 10

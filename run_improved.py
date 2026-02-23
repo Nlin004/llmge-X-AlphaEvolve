@@ -415,8 +415,13 @@ def check4results(gene_id):
             results = file.read()
         results = results.split(',')
         fitness = [float(r.strip()) for r in results]
-        # TODO: get all features later
-        fitness = [fitness[0], fitness[1]]
+
+        # fitness = float(results.strip())
+        # LLMGE might expect a tuple, so wrap in single-element tuple
+        # fitness = (fitness,)
+
+        # # TODO: get all features later
+        # fitness = [fitness[0], fitness[1]]
         fitness = tuple(fitness)
         
         GLOBAL_DATA[gene_id]['status'] = 'completed'
@@ -840,7 +845,15 @@ GLOBAL_DATA = {}
 GLOBAL_DATA_HIST = {}
 GLOBAL_DATA_ANCESTRY = {}
 GLOBAL_DATA_ANCESTRY = {}
-GLOBAL_DATA_ANCESTRY[MODEL] = {'GENES':[MODEL], 'MUTATE_TYPE':["CREATED"]}
+# GLOBAL_DATA_ANCESTRY[MODEL] = {'GENES':[MODEL], 'MUTATE_TYPE':["CREATED"]} ############ testing
+seed_id = os.path.basename(SEED_NETWORK)\
+            .replace(f'{MODEL}_','')\
+            .replace('.py','')
+
+GLOBAL_DATA_ANCESTRY[seed_id] = {
+    'GENES': [seed_id],
+    'MUTATE_TYPE': ['ROOT']
+}
 
 # Main Evolution Loop
 if __name__ == "__main__":
