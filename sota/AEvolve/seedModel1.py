@@ -244,15 +244,14 @@ def main():
         
 
         # UNCOMMENT IF YOU ONLY WANT TO SAVE IF YOUVE VERIFIED
-        # is_valid = verify_tensor_decomposition(factors_np, N, N, N, R)
+        is_valid = verify_tensor_decomposition(factors_np, N, N, N, R)
         
-        # if is_valid:
+        if is_valid:
             # Save factors if valid
-            # np.savez(pj(exp_dir, "factors.npz"), U=factors_np[0], V=factors_np[1], W=factors_np[2])
-            # print(f"Valid factors saved to {pj(exp_dir, 'factors.npz')}")
-            
-            # print("\nRounded Factors (U):")
-            # print(jnp.round(U))
+            np.savez(pj(exp_dir, "factors.npz"), U=factors_np[0], V=factors_np[1], W=factors_np[2])
+            print(f"Valid factors saved to {pj(exp_dir, 'factors.npz')}")
+            print("\nRounded Factors (U):")
+            print(jnp.round(U))
         np.savez(pj(exp_dir, "factors.npz"), U=factors_np[0], V=factors_np[1], W=factors_np[2])
         print(f"Factors saved to {pj(exp_dir, 'factors.npz')}")
         
