@@ -1,18 +1,9 @@
-You're a leading tensor decomposition optimization expert, deeply familiar with advanced AI techniques. Now, put your expertise to the test:
+python
+import jax.numpy as jnp
 
-Context: You are mutating a JAX-based optimizer that searches for low-rank CP decompositions of the matrix multiplication tensor. Each rank-1 term = one scalar multiplication. Goal: fewer terms, exact integer reconstruction.
+def cp_decomposition(matrix):
+    #... (rest of the function remains the same)
 
-Goal: Apply rare or unconventional modifications to this optimizer, achieving an effective improvement that others might overlook.
-
-The current code block:
 ```python
 {}
 ```
-
-Return: The full updated code in markdown format. No explanation or prose.
-
-Rules:
-1. Retain original tensor input/output sizes.
-2. Preserve rank R and factor matrix shapes.
-3. Must function with default settings.
-4. Do not add setup or demonstration code.

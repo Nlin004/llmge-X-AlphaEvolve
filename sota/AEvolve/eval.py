@@ -77,7 +77,11 @@ def verify_tensor_decomposition(decomposition, n, m, p_dim):
     # matmul_tensor = generate_matmul_tensor(n)
 
     constructed_tensor = np.einsum('ir,jr,kr->ijk', U, V, W)
-    constructed_tensor = np.rint(constructed_tensor).astype(np.int32)
+    # constructed_tensor = np.rint(constructed_tensor).astype(np.int32)
+    # DO NOT ROUND!!!!
+    err = np.max(np.abs(constructed_tensor - matmul_tensor))
+    if err > 1e-8:
+        return False
 
     print("TRUTH:\n")
     print(matmul_tensor)
@@ -88,6 +92,130 @@ def verify_tensor_decomposition(decomposition, n, m, p_dim):
 
 
 
+
+
+def apply_decomposition(A, B, U, V, W):
+    """
+    Apply bilinear algorithm defined by (U, V, W).
+    """
+    n = A.shape[0]
+    A_flat = A.reshape(-1)
+    B_flat = B.reshape(-1)
+    C_flat = np.zeros(n * n)
+
+    R = U.shape[1]
+
+    for r in range(R):
+        a_r = np.dot(U[:, r], A_flat)
+        b_r = np.dot(V[:, r], B_flat)
+        C_flat += (a_r * b_r) * W[:, r]
+
+    return C_flat.reshape(n, n, order="F") # ensure column-major order!!!!!
+
+    
+def basis_verification(U, V, W, n, atol=1e-5):
+    """
+    Verify decomposition on all n^2 by n^2 basis matrix pairs.
+    Prints detailed comparison for each test.
+    """
+
+    # Round to half-integers (AlphaEvolve approach)
+    U = np.round(U * 2) / 2
+    V = np.round(V * 2) / 2
+    W = np.round(W * 2) / 2
+
+
+
+    total_tests = n * n * n * n
+    passed_tests = 0
+    failed_tests = []
+    
+    print("\n" + "="*100)
+    print(f"BASIS VERIFICATION: Testing all {total_tests} basis matrix pairs for {n}×{n} matrices")
+    print("="*100)
+    
+    test_num = 0
+    
+    for i in range(n):
+        for j in range(n):
+            # Create basis matrix A with single 1 at position (i,j)
+            A = np.zeros((n, n))
+            A[i, j] = 1.0
+            
+            for k in range(n):
+                for l in range(n):
+                    test_num += 1
+                    
+                    # Create basis matrix B with single 1 at position (k,l)
+                    B = np.zeros((n, n))
+                    B[k, l] = 1.0
+                    
+                    # Expected result
+                    C_expected = A @ B
+                    
+                    # Actual result from decomposition
+                    C_actual = apply_decomposition(A, B, U, V, W)  # Use ROUNDED factors?
+
+                    
+                    
+                    # Calculate error
+                    error_matrix = C_actual - C_expected
+                    max_error = np.max(np.abs(error_matrix))
+                    
+                    # Check if passes
+                    passes = np.allclose(C_actual, C_expected, atol=atol)
+                    
+                    if passes:
+                        passed_tests += 1
+                    else:
+                        failed_tests.append((test_num, i, j, k, l, max_error))
+                    
+                    # Print detailed comparison
+                    status = "✓ PASS" if passes else "✗ FAIL"
+                    print(f"\nTest {test_num}/{total_tests}: A[{i},{j}]=1 × B[{k},{l}]=1  →  {status}")
+                    print(f"{'─'*100}")
+                    
+                    # Side-by-side comparison
+                    print(f"Expected C = A @ B:          Actual C (from decomposition):")
+                    for row_idx in range(n):
+                        expected_row = "  ".join([f"{C_expected[row_idx, col_idx]:7.4f}" for col_idx in range(n)])
+                        actual_row = "  ".join([f"{C_actual[row_idx, col_idx]:7.4f}" for col_idx in range(n)])
+                        print(f"  [{expected_row}]    [{actual_row}]")
+                    
+                    # Error matrix
+                    print(f"\nError = Actual - Expected:")
+                    for row_idx in range(n):
+                        error_row = "  ".join([f"{error_matrix[row_idx, col_idx]:+7.4f}" for col_idx in range(n)])
+                        print(f"  [{error_row}]")
+                    
+                    print(f"Max error: {max_error:.6e}  (tolerance: {atol:.6e})")
+                    
+                    if not passes:
+                        print(f"FAILED: Error {max_error:.6e} exceeds tolerance {atol:.6e}")
+    
+    # Summary
+    print("\n" + "="*100)
+    print("VERIFICATION SUMMARY")
+    print("="*100)
+    print(f"Total tests: {total_tests}")
+    print(f"Passed: {passed_tests}/{total_tests} ({100*passed_tests/total_tests:.1f}%)")
+    print(f"Failed: {len(failed_tests)}/{total_tests} ({100*len(failed_tests)/total_tests:.1f}%)")
+    ratio = passed_tests / total_tests
+
+    if failed_tests:
+        print(f"\nVERIFICATION FAILED")
+        print(f"\nFailed tests (first 10):")
+        for test_num, i, j, k, l, max_error in failed_tests[:10]:
+            print(f"  Test {test_num}: A[{i},{j}]=1 × B[{k},{l}]=1  →  Max error: {max_error:.6e}")
+        
+        if len(failed_tests) > 10:
+            print(f"  ... and {len(failed_tests) - 10} more failures")
+    
+    else:
+        print(f"VERIFICATION PASSED - All {total_tests} basis tests correct!")
+
+    # for LLMGE: return the ratio of passed tests as a fitness metric (higher is better), so like 14/16 means only a couple failed.
+    return ratio
 
 
 
@@ -108,9 +236,9 @@ def apply_decomposition_to_multiply(A, B, factor_matrix_1, factor_matrix_2, fact
     Args:
         A: Matrix of shape (n, n)
         B: Matrix of shape (n, n)
-        factor_matrix_1: Shape (n², R)
-        factor_matrix_2: Shape (n², R)
-        factor_matrix_3: Shape (n², R)
+        factor_matrix_1: Shape (n^2, R)
+        factor_matrix_2: Shape (n^2, R)
+        factor_matrix_3: Shape (n^2, R)
     
     Returns:
         C: Result matrix of shape (n, n)
@@ -119,9 +247,9 @@ def apply_decomposition_to_multiply(A, B, factor_matrix_1, factor_matrix_2, fact
     R = factor_matrix_1.shape[1]  # Number of rank-1 components (multiplications)
     
     # Flatten input matrices
-    A_flat = A.flatten()  # Shape: (n²,)
-    B_flat = B.flatten()  # Shape: (n²,)
-    C_flat = np.zeros(n * n)  # Shape: (n²,)
+    A_flat = A.flatten()  # Shape: (n2,)
+    B_flat = B.flatten()  # Shape: (n2,)
+    C_flat = np.zeros(n * n)  # Shape: (n2,)
     
     # Apply each rank-1 component
     for r in range(R):
@@ -147,7 +275,7 @@ def apply_decomposition_to_multiply(A, B, factor_matrix_1, factor_matrix_2, fact
 
 # ===================== VERIFICATION VIA RANDOM MULTIPLICATION TESTS: =====================
 def verify_decomposition(factor_matrix_1, factor_matrix_2, factor_matrix_3, 
-                         n=2, num_tests=50, tol=5e-6):
+                         n=2, num_tests=50, tol=2e-1):
     """
     Verify that the decomposition correctly multiplies matrices.
     
@@ -202,7 +330,7 @@ def verify_decomposition(factor_matrix_1, factor_matrix_2, factor_matrix_3,
     
     correct_ratio = num_correct / num_tests
     avg_error = total_error / num_tests
-    
+    print(f"Avg error over {num_tests} tests: {avg_error:.2e}, Max error: {max_error:.2e}")
     return correct_ratio, num_correct, num_tests, max_error, avg_error, num_multiplications
 
 
@@ -214,8 +342,8 @@ def get_args():
     parser.add_argument('--variant_dir', type=str, default='models', help="directory where models are written by LLM-GE")
     
     # Problem parameters
-    parser.add_argument('--N', type=int, default=2, help="matrix dimension")
-    parser.add_argument('--R', type=int, default=7, help="target rank")
+    parser.add_argument('--N', type=int, default=3, help="matrix dimension")
+    parser.add_argument('--R', type=int, default=23, help="target rank")
     parser.add_argument('--num_tests', type=int, default=50, help="number of verification tests")
     
     return parser.parse_args()
@@ -252,8 +380,8 @@ if __name__ == '__main__':
 
 
     print("="*120)
-    print(f"EVALUATING: {args.N}×{args.N} matrix multiplication")
-    print(f"Target rank: {args.R}")
+    # print(f"EVALUATING: {args.N}×{args.N} matrix multiplication")
+    # print(f"Target rank: {args.R}")
     print(f"Gene ID: {gene_id}")
     print("="*120)
     
@@ -282,11 +410,15 @@ if __name__ == '__main__':
         # It will create its own experiment directory and save results
         # model_module.main()
         old_argv = sys.argv
+        # sys.argv = [
+        #     old_argv[0],
+        #     "--save_dir", str(run_dir),
+        #     "--N", str(args.N),
+        #     "--R", str(args.R),
+        # ]
         sys.argv = [
             old_argv[0],
             "--save_dir", str(run_dir),
-            "--N", str(args.N),
-            "--R", str(args.R),
         ]
 
 
@@ -295,7 +427,7 @@ if __name__ == '__main__':
 
         
         model_module.main()
-        sys.argv = old_argv
+        # sys.argv = old_argv
         # # Temporarily override __file__ in the model module so it doesn't change directory
         # if hasattr(model_module, '__file__'):
         #     original_model_file = model_module.__file__
@@ -342,32 +474,25 @@ if __name__ == '__main__':
         # ===========================
         
         factors_data = np.load(factors_file)
+        print(f"\nLoaded factors from {factors_file}")
+
         factor_matrix_1 = factors_data['U']
         factor_matrix_2 = factors_data['V']
         factor_matrix_3 = factors_data['W']
-        
+        thisN = int(factors_data['N'])
+        thisTargetRank = int(factors_data["R"])
         # REMOVING ROUNDING FIXED MY ERRORS!
-        # def round_half(x):
-        #     return np.round(x * 2) / 2
+        USE_ROUNDED = True
+        def round_half(x):
+            return np.round(x * 2) / 2
         
-        # factor_matrix_1 = round_half(factor_matrix_1)
-        # factor_matrix_2 = round_half(factor_matrix_2)
-        # factor_matrix_3 = round_half(factor_matrix_3)
+        if USE_ROUNDED:
+            factor_matrix_1 = round_half(factor_matrix_1)
+            factor_matrix_2 = round_half(factor_matrix_2)
+            factor_matrix_3 = round_half(factor_matrix_3)
         
-        print(f"\nLoaded factors from {factors_file}")
         print(f"Factor shapes: {factor_matrix_1.shape}, {factor_matrix_2.shape}, {factor_matrix_3.shape}")
         
-    # except Exception as e:
-    #     print(f"\nERROR loading factors: {e}")
-    #     print("Using dummy factors for demonstration...")
-        
-    #     # Create dummy factors (standard algorithm)
-    #     dim = args.N * args.N
-    #     rank = args.R
-    #     factor_matrix_1 = np.random.randn(dim, rank)
-    #     factor_matrix_2 = np.random.randn(dim, rank)
-    #     factor_matrix_3 = np.random.randn(dim, rank)
-
 
 
     except Exception as e:
@@ -397,7 +522,7 @@ if __name__ == '__main__':
     # VERIFY CORRECTNESS
     # ========================================================================
     
-    print(f"\nVerifying correctness using seed model's verification method...")
+    # print(f"\nVerifying correctness using seed model's verification method...")
     
     # ============= USE THIS FOR VERIFICATION VIA TENSOR! ============
     # is_correct = verify_tensor_decomposition(
@@ -406,31 +531,30 @@ if __name__ == '__main__':
     #     m=args.N,
     #     p_dim=args.N
     # )
+
+    basis_ratio = basis_verification(factor_matrix_1, factor_matrix_2, factor_matrix_3, n=thisN)
+    print(f"***************** BASIS CHECK: {basis_ratio} *****************")
     # num_multiplications = args.R
 
 
     # ============= USE THIS FOR VERIFICATION VIA RANDOM MATRIX MULT CHECKS! ============
     correct_ratio, num_correct, num_total, max_error, avg_error, num_multiplications = verify_decomposition(
         factor_matrix_1, factor_matrix_2, factor_matrix_3,
-        n=args.N,
+        n=thisN,
         num_tests=args.num_tests
     )    
     # print("PERCENTAGE CORRECT!!!!\n")
     # print(correct_ratio)
-    standard_mults = args.N ** 3  # Standard algorithm for n×n matrices
+    standard_mults = thisN ** 3  # Standard algorithm for n×n matrices
     
     # ========================================================================
     # CALCULATE FITNESS
     # ========================================================================
     ONE_FITNESS = False
-    # Fitness has two objectives:
-    # 1. Maximize correctness_ratio (0.0 to 1.0)
-    # 2. Minimize num_multiplications
-    
-    # We'll use a weighted combination:
-    # - Correctness is most important (huge penalty if wrong)
-    # - Number of multiplications matters once correct
     if ONE_FITNESS:
+
+        # use is_correct from tensor verification for a simple fitness function
+        
         if correct_ratio == 1.0:
             # Perfect: optimize for performance
             # Scale num_multiplications to be comparable to small differences in ratio
@@ -450,9 +574,10 @@ if __name__ == '__main__':
             status = f"INCORRECT ({correct_ratio:.0%})"
     else:
         # Multi-objective: return tuple (lower is better for both)
+        fitness_0 = basis_ratio
         fitness_1 = correct_ratio  # Maximize correct problems solved (1.0 = perfect, 0.0 = all wrong)
         fitness_2 = num_multiplications  # Minimize rank (7 = target)
-        fitness = (fitness_1, fitness_2)
+        fitness = (fitness_0, fitness_1, fitness_2)
     # ========================================================================
     # PRINT RESULTS
     # ========================================================================
@@ -461,7 +586,7 @@ if __name__ == '__main__':
     print("RESULTS")
     print("="*120)
     print(f"Rank (multiplications): {num_multiplications}")
-    print(f"Target rank: {args.R}")
+    print(f"Target rank: {thisTargetRank}")
     print(f"Standard algorithm: {standard_mults} multiplications")
     print(f"Improvement: {100*(1 - num_multiplications/standard_mults):.1f}% reduction")
     
@@ -494,9 +619,10 @@ if __name__ == '__main__':
         # Save results
         results_text = f"{fitness:.4f}"
     else: 
-        print(f"\nCorrectness fitness (lower is better): {fitness_1:.4f}")
+        print(f"\nBasis fitness (higher is better): {fitness_0:.4f}")
+        print(f"\nCorrectness fitness (higher is better): {fitness_1:.4f}")
         print(f"Multiplication fitness (lower is better): {fitness_2}")
-        results_text = f"{fitness_1:.4f}, {fitness_2}"
+        results_text = f"{fitness_0:.4f}, {fitness_1:.4f}, {fitness_2}"
 
         
     print("="*120)

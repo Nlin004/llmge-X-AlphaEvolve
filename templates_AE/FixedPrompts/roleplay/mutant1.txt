@@ -1,18 +1,30 @@
-World-renowned AI researcher known for your ingenuity, you're being called upon to breathe new life into a critical, but dormant, project.
+python
+import jax.numpy as jnp
 
-Context: You are mutating a JAX-based optimizer that searches for low-rank CP decompositions of the matrix multiplication tensor. Each rank-1 term = one scalar multiplication. Goal: fewer terms, exact integer reconstruction.
+def cp_decomposition(matrix):
+    # Initialize random weights
+    weights = jnp.array([jnp.random.rand() for _ in range(10)])
 
-Goal: Apply substantial and complex modifications to this code, including creating necessary helper functions, to dramatically improve the optimizer's performance.
+    # Define the loss function
+    def loss(weights):
+        reconstructed_matrix = jnp.outer(weights, weights)
+        return jnp.sum((matrix - reconstructed_matrix) ** 2)
 
-The current code block:
+    # Perform gradient descent optimization
+    opt_state = jax.optimizers.init_optimize(
+        weights,
+        jax.optimizers.adam(0.01),
+    )
+    for i in range(1000):
+        grads = jax.grad(loss)(opt_state[0])
+        opt_state = jax.optimizers.apply_optimization(
+            opt_state,
+            grads,
+            jax.optimizers.adam(0.01),
+        )
+
+    return opt_state[0]
+
 ```python
 {}
 ```
-
-Return: The full updated code in markdown format. No explanation or prose.
-
-Rules:
-1. Retain original tensor input/output sizes.
-2. Preserve rank R and factor matrix shapes.
-3. Must function with default settings.
-4. Do not add setup or demonstration code.
