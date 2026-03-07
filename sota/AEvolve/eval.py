@@ -171,6 +171,9 @@ def apply_decomposition_bilinear(A, B, U, V, W):
 #     print("All basis tests pass?" , ok)
 #     return ok
 
+
+# ============ BASIS COMPARISON TESTS =============
+
 def basis_verification_cleaned(U, V, W, n):
     print("**** BASIS TESTS **** ")
     total_tests = n * n * n * n
@@ -219,6 +222,8 @@ def basis_verification_vs_ref(U, V, W, U_ref, V_ref, W_ref, n):
     return counter / total
 
 
+
+# ============ RANDOM MATRIX TESTS =============
 def random_matrix_verification_vs_ref(U, V, W, U_ref, V_ref, W_ref,
                                       n, num_tests=50, seed=0):
     rng = np.random.default_rng(seed)
@@ -253,33 +258,34 @@ def random_matrix_verification(U, V, W, n, num_tests=50, seed=0):
     return counter/num_tests # float
 
 
-# MAIN VERIFICATION:
-def verify_decomposition_pipeline(U_float, V_float, W_float, n, num_random_tests=50):
-    # Step 0: projection
-    # U, V, W = project_to_integer_factors(U_float, V_float, W_float)
-    print("First rounding to half-integers.\n")
+# ============ MAIN VERIFICATION PIPELINE =============
 
-    print("U_half:\n", np.round(U_float * 2) / 2)
-    print("V_half:\n", np.round(V_float * 2) / 2)
-    print("W_half:\n", np.round(W_float * 2) / 2)
+def verify_decomposition_pipeline(U_float, V_float, W_float, n, num_random_tests=50):
+    # Step 0: projection / rounding first
+    # U, V, W = project_to_integer_factors(U_float, V_float, W_float)
+
+    print("First rounding to half-integers.\n")
 
     U_half, V_half, W_half = U_float, V_float, W_float # testing temporarily with no rounding.
     USE_ROUNDING = True # rounding FACTORS is allowed. try to match with half integer tensors.
     if USE_ROUNDING:
         U_half, V_half, W_half = project_to_half_integer_factors(U_float, V_float, W_float)
 
+    print("U_half:\n", U_half)
+    print("V_half:\n", V_half)
+    print("W_half:\n", W_half)
     # T_ref = compute_reference_tensor(U_float, V_float, W_float)
 
 
 
 
-    # Step A: actual tensor correctness
+    # Step 1: actual tensor correctness
     ratio_matrix_entries_wrong, magnitude_of_errors = exact_tensor_check(U_half, V_half, W_half, n)
     print(f"Exact tensor correctness check: {100*(1-ratio_matrix_entries_wrong):.2f}% entries correct, RMSE: {magnitude_of_errors:.2e}\n\n")
     # ================ if just checking EQUALS or NOT: ================
     # tensor_check = 0
-    # if exact_tensor_check(U_half, V_half, W_half, n):
-    # if exact_tensor_check_against_ref(U_half, V_half, W_half, T_ref):
+    # if exact_tensor_check(U_half, V_half, W_half, n):  # if using: change the code in the function to just return np.equals() instead of the ratio + magnitude.
+    ## if exact_tensor_check_against_ref(U_half, V_half, W_half, T_ref):
     #     print("[PASS] Exact tensor MATCHES!")
     #     tensor_check = 1
     # else:
@@ -287,17 +293,16 @@ def verify_decomposition_pipeline(U_float, V_float, W_float, n, num_random_tests
     # ================================================================
 
 
-    # Step B: basis verification
+    # Step 2: basis verification
     basis_score = basis_verification_cleaned(U_half, V_half, W_half, n)
     # basis_score = basis_verification_vs_ref(U_half, V_half, W_half, U_ref, V_ref, W_ref, n) # using T_ref instead of canonical A@B as the basis for correctness, since the model is really trying to match T_ref not necessarily the canonical tensor.
-    # print(f"Basis verification score: {basis_score:.2%}")
 
-    # Step C: random tests
+
+    # Step 3: random tests
     random_score = random_matrix_verification(U_half, V_half, W_half, n, num_random_tests)
     # random_score = random_matrix_verification_vs_ref(U_half, V_half, W_half, U_ref, V_ref, W_ref, n, num_random_tests) # using T_ref instead of canonical A@B as the basis for correctness, since the model is really trying to match T_ref not necessarily the canonical tensor.
-    # print(f"Random matrix verification score: {random_score:.2%}")
 
-
+    # Done: return all metrics gathered from the suites of tests as a 4-tuple for LLMGE 
     fitness = (ratio_matrix_entries_wrong, magnitude_of_errors, basis_score, random_score)
     return fitness
 
@@ -659,10 +664,10 @@ def get_args():
     parser.add_argument('--random_seed', type=int, default=42, help="random seed")
     parser.add_argument('--variant_dir', type=str, default='models', help="directory where models are written by LLM-GE")
     
-    # Problem parameters
-    parser.add_argument('--N', type=int, default=3, help="matrix dimension")
-    parser.add_argument('--R', type=int, default=23, help="target rank")
-    parser.add_argument('--num_tests', type=int, default=50, help="number of verification tests")
+    # Problem parameters - don't define them here, define them ONLY in seedModel!!!
+    # parser.add_argument('--N', type=int, default=3, help="matrix dimension")
+    # parser.add_argument('--R', type=int, default=23, help="target rank")
+    # parser.add_argument('--num_tests', type=int, default=50, help="number of random verification tests")
     
     return parser.parse_args()
 
@@ -816,27 +821,27 @@ if __name__ == '__main__':
         factor_matrix_3 = round_half(factor_matrix_3)
 
 
-    # TESTING STRASSEN (CORRECTED MATRIX3 c11[3] = 1 instead of 0):
-    factor_matrix_1 = np.array([
-        [ 1,  0,  1,  0,  1, -1,  0],  # a11
-        [ 0,  0,  0,  0,  1,  0,  1],  # a12
-        [ 0,  1,  0,  0,  0,  1,  0],  # a21
-        [ 1,  1,  0,  1,  0,  0, -1],  # a22
-    ], dtype=float)
+    ## TESTING STRASSEN (CORRECTED MATRIX3 c11[3] = 1 instead of 0):
+    # factor_matrix_1 = np.array([
+    #     [ 1,  0,  1,  0,  1, -1,  0],  # a11
+    #     [ 0,  0,  0,  0,  1,  0,  1],  # a12
+    #     [ 0,  1,  0,  0,  0,  1,  0],  # a21
+    #     [ 1,  1,  0,  1,  0,  0, -1],  # a22
+    # ], dtype=float)
 
-    factor_matrix_2 = np.array([
-        [ 1,  1,  0, -1,  0,  1,  0],  # b11
-        [ 0,  0,  1,  0,  0,  1,  0],  # b12
-        [ 0,  0,  0,  1,  0,  0,  1],  # b21
-        [ 1,  0, -1,  0,  1,  0,  1],  # b22
-    ], dtype=float)
+    # factor_matrix_2 = np.array([
+    #     [ 1,  1,  0, -1,  0,  1,  0],  # b11
+    #     [ 0,  0,  1,  0,  0,  1,  0],  # b12
+    #     [ 0,  0,  0,  1,  0,  0,  1],  # b21
+    #     [ 1,  0, -1,  0,  1,  0,  1],  # b22
+    # ], dtype=float)
 
-    factor_matrix_3 = np.array([
-        [ 1,  0,  0,  1, -1,  0,  1],  # c11 
-        [ 0,  0,  1,  0,  1,  0,  0],  # c12 
-        [ 0,  1,  0,  1,  0,  0,  0],  # c21 
-        [ 1, -1,  1,  0,  0,  1,  0],  # c22
-    ], dtype=float)
+    # factor_matrix_3 = np.array([
+    #     [ 1,  0,  0,  1, -1,  0,  1],  # c11  ### fourth entry is 1 instead of 0. 
+    #     [ 0,  0,  1,  0,  1,  0,  0],  # c12 
+    #     [ 0,  1,  0,  1,  0,  0,  0],  # c21 
+    #     [ 1, -1,  1,  0,  0,  1,  0],  # c22
+    # ], dtype=float)
     
     print(f"Factor shapes: {factor_matrix_1.shape}, {factor_matrix_2.shape}, {factor_matrix_3.shape}")
     print("Factor matrix 1 (U):\n", factor_matrix_1)
