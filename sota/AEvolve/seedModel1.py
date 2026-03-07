@@ -8,7 +8,7 @@ from pathlib import Path as p
 from os.path import join as pj
 
 # --- 1. Utilities for Directory Management ---
-# --OPTION--
+
 def create_save_dir(save_root: str) -> str:
     """
     Create an incrementing exp directory (exp1, exp2, ...).
@@ -37,7 +37,6 @@ def create_save_dir(save_root: str) -> str:
     return save_dir
 
 # --- 2. Core Math / Logic ---
-# --OPTION--
 
 def generate_matmul_tensor(n: int) -> jnp.ndarray:
     """Generate the matrix multiplication tensor <n, n, n>."""
@@ -53,41 +52,6 @@ def generate_matmul_tensor(n: int) -> jnp.ndarray:
                 # T = T.at[i * n + j, j * n + k, i * n + k].set(1.0) # Fixed: encode C[k,i] instead of C[i,k] -  old code computed transpose of the result.
     return T
 
-# def verify_tensor_decomposition(decomposition, n, m, p_dim, rank):
-#     """
-#     Verifies the correctness of the tensor decomposition.
-#     """
-#     factor_matrix_1, factor_matrix_2, factor_matrix_3 = decomposition
-    
-#     # 1. Form the ground truth matrix multiplication tensor
-#     matmul_tensor = np.zeros((n * m, m * p_dim, p_dim * n), dtype=np.int32)
-#     for i in range(n):
-#         for j in range(m):
-#             for k in range(p_dim):
-#                 matmul_tensor[i * m + j][j * p_dim + k][k * n + i] = 1
-
-#     # 2. Reconstruct from factors
-#     # Note: We use the same einsum 'ir,jr,kr->ijk' as the loss function
-#     constructed_tensor = np.einsum('ir,jr,kr -> ijk', *decomposition)
-    
-#     # 3. DON'T round the constructed tensor, but check if it's close enough to the integer tensor.
-
-#     constructed_tensor = np.rint(constructed_tensor).astype(np.int32)
-    
-#     # 4. Check equality
-#     if np.array_equal(constructed_tensor, matmul_tensor):
-#         print(f"\n[Verification] SUCCESS: Decomposition matches <{n},{m},{p_dim}> exactly.")
-        
-#         # Analyze the coefficients used
-#         rounded_factors = np.rint(np.vstack((factor_matrix_1, factor_matrix_2, factor_matrix_3)))
-#         unique_vals = np.unique(rounded_factors)
-#         np.set_printoptions(linewidth=100)
-#         print(f"[Verification] Coefficients used: {unique_vals}")
-#         return True
-#     else:
-#         print("\n[Verification] FAILED: Constructed tensor does not match ground truth.")
-#         return False
-# --OPTION--
 
 # --- 3. Configuration ---
 
@@ -135,7 +99,7 @@ def main():
     #     exp_dir = create_save_dir(args.save_root)
 
     exp_dir = resolve_exp_dir(args)
-
+    thisFileName = os.path.basename(__file__)
     # Derived values
     N = args.N
     dim = N * N
@@ -156,71 +120,120 @@ def main():
     except:
         device_kind = "unknown"
 
-    print("=" * 70)
-    print(f"Running AlphaTensor-style Search")
-    print(f"Matrix Size N: {N} (Tensor Dim: {dim})")
-    print(f"Target Rank R: {R}")
-    print(f"Batch Size: {args.batch_size}")
-    print(f"Iterations: {args.iterations}")
-    print(f"Learning Rate: {args.lr}")
-    print(f"Device: {device_kind}")
-    print("=" * 70)
+
+    print(f"\n\n\n+================================[ Begin {thisFileName[:-3].upper()} Output ]================================+")
+    print(f"    Running AlphaTensor-style Search")
+    print(f"    Matrix Size N: {N} (Tensor Dim: {dim})")
+    print(f"    Target Rank R: {R}")
+    print(f"    Batch Size: {args.batch_size}")
+    print(f"    Iterations: {args.iterations}")
+    print(f"    Learning Rate: {args.lr}")
+    print(f"    Device: {device_kind}")
+    print("    "+"=" * 70)
 
     # 1. Target
     target_tensor = generate_matmul_tensor(N)
 
-    # 2. Loss Function
-    # We define it inside main to capture 'target_tensor' easily, 
-    # but JAX handles this fine.
+    # 2. Loss Function: 
+    # IF YOU ARE EVOLVING THIS FUNCTION, SEE THE OTHER COMMENTED LOSS_FNs for ideas on how to modify it.
+    # End goal is to provide a loss function that optimizes for solutions as close as possible to a clean integer factorization (with factors ideally in -1,0,1) that reconstructs the tensor exactly.
 
-
-    # def loss_fn(params):
-    #     U, V, W = params
-    #     # Reconstruct: sum_r (u_r (x) v_r (x) w_r)
-    #     # Factors shape: (dim, Rank)
-    #     T_hat = jnp.einsum('ir,jr,kr->ijk', U, V, W)
-    #     return jnp.sum((target_tensor - T_hat) ** 2)
-
+    # LOSS FUNCTION WITHOUT DISCRETIZATION
+    def loss_fn(params):
+        U, V, W = params
+        # Reconstruct: sum_r (u_r (x) v_r (x) w_r)
+        # Factors shape: (dim, Rank)
+        T_hat = jnp.einsum('ir,jr,kr->ijk', U, V, W)
+        return jnp.sum((target_tensor - T_hat) ** 2)
+    # =====================================================
 
     # THIS LOSS FUNCTION HAS DISCRETINIZATION PENALTY, WE WANT TO OPTIMIZE MORE FOR CORRECT WHEN ROUNDED!!!
-    def loss_fn(params, disc_weight):
-        U, V, W = params
-        T_hat = jnp.einsum('ir,jr,kr->ijk', U, V, W)
-        reconstruction_loss = jnp.sum((target_tensor - T_hat) ** 2)
+    # def loss_fn(params, disc_weight):
+    #     U, V, W = params
+    #     T_hat = jnp.einsum('ir,jr,kr->ijk', U, V, W)
+    #     reconstruction_loss = jnp.sum((target_tensor - T_hat) ** 2)
         
-        # Always compute discretization penalty (but multiply by weight)
-        # This avoids the if statement that causes JAX tracing issues
-        def half_integer_distance(x):
-            rounded = jnp.round(x * 2) / 2
-            return jnp.sum((x - rounded) ** 2)
+    #     # Always compute discretization penalty (but multiply by weight)
+    #     # This avoids the if statement that causes JAX tracing issues
+    #     def half_integer_distance(x):
+    #         rounded = jnp.round(x * 2) / 2
+    #         return jnp.sum((x - rounded) ** 2)
         
-        disc_penalty = (half_integer_distance(U) + 
-                    half_integer_distance(V) + 
-                    half_integer_distance(W))
+    #     disc_penalty = (half_integer_distance(U) + 
+    #                 half_integer_distance(V) + 
+    #                 half_integer_distance(W))
         
-        # When disc_weight=0, this just adds 0
-        return reconstruction_loss + disc_weight * disc_penalty
+    #     # When disc_weight=0, this just adds 0
+    #     return reconstruction_loss + disc_weight * disc_penalty
+    # =========================================================
 
+    # Loss function to bias towards Strassen-like solutions (with -1,0,1 coefficients):
+    # def loss_fn(params):
+    #     U, V, W = params
+    #     T_hat = jnp.einsum('ir,jr,kr->ijk', U, V, W)
+
+    #     # 1. Exact reconstruction pressure
+    #     recon_loss = jnp.sum((target_tensor - T_hat) ** 2)
+
+    #     # 2. Sparsity (L1)
+    #     sparsity = (
+    #         jnp.sum(jnp.abs(U)) +
+    #         jnp.sum(jnp.abs(V)) +
+    #         jnp.sum(jnp.abs(W))
+    #     )
+
+    #     # 3. Integer attraction (soft projection)
+    #     def integer_distance(x):
+    #         return jnp.sum((x - jnp.round(x)) ** 2)
+
+    #     integer_penalty = (
+    #         integer_distance(U) +
+    #         integer_distance(V) +
+    #         integer_distance(W)
+    #     )
+
+    #     return (
+    #         recon_loss
+    #         + 1e-4 * sparsity
+    #         + 1e-3 * integer_penalty
+    #     )
+    # =========================================================
+    # Strassen like loss function with annealed discretization penalty:
+    # def loss_fn(params, disc_weight):  # Added disc_weight!
+    #     U, V, W = params
+    #     T_hat = jnp.einsum('ir,jr,kr->ijk', U, V, W)
+    #     recon_loss = jnp.sum((target_tensor - T_hat) ** 2)
+        
+    #     # Half-integer penalty
+    #     def half_integer_distance(x):
+    #         rounded = jnp.round(x * 2) / 2
+    #         return jnp.sum((x - rounded) ** 2)
+        
+    #     disc_penalty = (
+    #         half_integer_distance(U) +
+    #         half_integer_distance(V) +
+    #         half_integer_distance(W)
+    #     )
+        
+    #     return recon_loss + disc_weight * disc_penalty
 
 # --OPTION--
 
     # 3. Optimizer & Step
     optimizer = optax.adam(args.lr)
-
     @jax.jit
     # ============================WITHOUT ROUNDING====================================
-    # def step(params, opt_state):
-    #     loss, grads = jax.value_and_grad(loss_fn)(params)
-    #     updates, opt_state = optimizer.update(grads, opt_state)
-    #     params = optax.apply_updates(params, updates)
-    #     return params, opt_state, loss
-    # ============================WITH ROUNDING PENALTY====================================
-    @jax.jit
-    def step(params, opt_state, disc_weight):
-        loss, grads = jax.value_and_grad(lambda p: loss_fn(p, disc_weight))(params)
+    def step(params, opt_state):
+        loss, grads = jax.value_and_grad(loss_fn)(params)
         updates, opt_state = optimizer.update(grads, opt_state)
         params = optax.apply_updates(params, updates)
         return params, opt_state, loss
+    # ============================WITH ROUNDING PENALTY====================================
+    # def step(params, opt_state, disc_weight):
+    #     loss, grads = jax.value_and_grad(lambda p: loss_fn(p, disc_weight))(params)
+    #     updates, opt_state = optimizer.update(grads, opt_state)
+    #     params = optax.apply_updates(params, updates)
+    #     return params, opt_state, loss
 
         
 # --OPTION--
@@ -244,39 +257,39 @@ def main():
 
     # 5. Training Loop
     # ============================WITHOUT ROUNDING====================================
-    # print("\nStarting optimization...")
-    
-    # for i in range(args.iterations):
-    #     batch_params, batch_opt_state, batch_losses = jax.vmap(step)(batch_params, batch_opt_state)
-        
-    #     if i % args.print_every == 0:
-    #         best_loss = jnp.min(batch_losses)
-    #         print(f"Step {i}: Best Loss = {best_loss:.6f}")
-
-    # ============================WITH ROUNDING PENALTY====================================
-    # Training Loop with Annealing
-    print("\nStarting optimization...")
-    # MODIFY THESE TO CHANGE ANNEALING SCHEDULE
-    disc_weight_start = 0.0
-    disc_weight_end = 0.1
-    disc_anneal_start = 2000
+    print("\n    Starting optimization...")
     
     for i in range(args.iterations):
-        # Compute discretization weight (anneal from start to end)
-        if i < disc_anneal_start:
-            disc_weight = disc_weight_start
-        else:
-            progress = (i - disc_anneal_start) / (args.iterations - disc_anneal_start)
-            disc_weight = disc_weight_start + progress * (disc_weight_end - disc_weight_start)
-        
-        # Vectorized step with current disc_weight
-        batch_params, batch_opt_state, batch_losses = jax.vmap(
-            lambda p, s: step(p, s, disc_weight)
-        )(batch_params, batch_opt_state)
+        batch_params, batch_opt_state, batch_losses = jax.vmap(step)(batch_params, batch_opt_state)
         
         if i % args.print_every == 0:
             best_loss = jnp.min(batch_losses)
-            print(f"Step {i}: Best Loss = {best_loss:.6f}, Disc Weight = {disc_weight:.4f}")
+            print(f"       Step {i}: Best Loss = {best_loss:.6f}")
+
+    # ============================WITH ROUNDING PENALTY====================================
+    # # Training Loop with Annealing
+    # print("\nStarting optimization...")
+    # # MODIFY THESE TO CHANGE ANNEALING SCHEDULE
+    # disc_weight_start = 0.0
+    # disc_weight_end = 0.1
+    # disc_anneal_start = 2000
+    
+    # for i in range(args.iterations):
+    #     # Compute discretization weight (anneal from start to end)
+    #     if i < disc_anneal_start:
+    #         disc_weight = disc_weight_start
+    #     else:
+    #         progress = (i - disc_anneal_start) / (args.iterations - disc_anneal_start)
+    #         disc_weight = disc_weight_start + progress * (disc_weight_end - disc_weight_start)
+        
+    #     # Vectorized step with current disc_weight
+    #     batch_params, batch_opt_state, batch_losses = jax.vmap(
+    #         lambda p, s: step(p, s, disc_weight)
+    #     )(batch_params, batch_opt_state)
+        
+    #     if i % args.print_every == 0:
+    #         best_loss = jnp.min(batch_losses)
+    #         print(f"    Step {i}: Best Loss = {best_loss:.6f}, Disc Weight = {disc_weight:.4f}")
     # ====================================================================================
 
 # --OPTION--
@@ -286,15 +299,15 @@ def main():
     best_params = jax.tree.map(lambda x: x[min_loss_idx], batch_params)
     final_loss = float(batch_losses[min_loss_idx])
 
-    print("-" * 30)
-    print(f"Final Best Loss: {final_loss:.6f}")
+    print("   "+"-" * 30)
+    print(f"    Final Best Loss: {final_loss:.6f}")
 
     # Save results to file
     results_file = pj(exp_dir, "results.txt")
     with open(results_file, "w") as f:
         f.write(f"Final Loss: {final_loss}\n")
         f.write(f"Config: {vars(args)}\n")
-    print(f"Results saved to {results_file}")
+    print(f"    Results saved to {results_file}")
     
 # --OPTION--
 
@@ -308,15 +321,9 @@ def main():
     problem_data = (args.N, args.R)
     np.savez(pj(exp_dir, "factors.npz"), U=factors_np[0], V=factors_np[1], W=factors_np[2], N=problem_data[0], R=problem_data[1])
     # np.savez(pj(exp_dir, "factors.npz"), U=rounded_factors_np[0], V=rounded_factors_np[1], W=rounded_factors_np[2], N=problem_data[0], R=problem_data[1])
-    print(f"Factors saved to {pj(exp_dir, 'factors.npz')}")
-    
-    print("\nFactors (U):")
-    # print(jnp.round(U))
-    print(U)
-    # print(rounded_factors_np[0])
+    print(f"    Factors saved to {pj(exp_dir, 'factors.npz')}")
 
-
-    print("=" * 70)
+    print(f"+=================================[END OF {thisFileName[:-3].upper()} OUTPUT]=================================+\n") # name of file except the .py extension.
 # --OPTION--
 
 if __name__ == "__main__":
