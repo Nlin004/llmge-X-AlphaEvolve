@@ -57,17 +57,19 @@ def project_to_half_integer_factors(U, V, W):
     return U_half, V_half, W_half
 
 
-def exact_tensor_check(U, V, W, n): # the input for these is done after the projection (either method above, full ints or full+half ints))
-    # here we assume U V W factors HAVE been rounded, to make a more "mathematical" tensor that could actually represent product
-    dim = n * n
-
-    T_true = np.zeros((dim, dim, dim), dtype=np.int64)
+# RECTANGULAR SUPPORT:
+def exact_tensor_check(U, V, W, n, m, p):  # Added m, p parameters!
+    """Check tensor for N×M × M×P multiplication."""
+    dim_A = n * m
+    dim_B = m * p
+    dim_C = n * p
+    
+    T_true = np.zeros((dim_A, dim_B, dim_C), dtype=np.int64)
     for i in range(n):
-        for j in range(n):
-            for k in range(n):
-                # T_true[i*n+j, j*n+k, k*n+i] = 1
-                T_true[i*n+j, j*n+k, i*n+k] = 1
-    # RECONSTRUCTION of tensor from U V W.
+        for j in range(m):
+            for k in range(p):
+                T_true[i*m+j, j*p+k, i*p+k] = 1
+    
 
     T_hat = np.einsum('ir,jr,kr->ijk', U, V, W)
 
@@ -75,9 +77,6 @@ def exact_tensor_check(U, V, W, n): # the input for these is done after the proj
     print(T_true)
     print("\nReconstructed tensor (T_hat):")
     print(T_hat)
-    # print("Reconstructed but rounded:") # THIS IS NOT CORRECT BECAUSE YOU CANT JUST SNAP THE TENSOR TO CORRECT ONE IF ITS "CLOSE ENOUGH"
-    # # constructed_tensor = np.rint(constructed_tensor).astype(np.int32)
-    # print(np.rint(T_hat).astype(np.int32))
 
     # Count incorrect entries
     total_entries = T_true.size
@@ -113,12 +112,19 @@ def exact_tensor_check_against_ref(U, V, W, T_ref):
 def apply_decomposition_bilinear(A, B, U, V, W):
     # this actually applies the decomposition of U V W to multiply A and B, by treating U V W as defining a bilinear algorithm for matrix multiplication. 
     # This kinda just tests the actual multiplication aspect - not just checking if the tensors match but checking if the actual multiplication results match for all basis pairs and random pairs.
-    n = A.shape[0]
+    # n = A.shape[0]
+
+    n, m1 = A.shape  # A is n×m
+    m2, p = B.shape  # B is m×p
+
+    assert m1 == m2, f"Incompatible dimensions: A is {n}×{m1}, B is {m2}×{p}"
+    m = m1
     
     # ROW-MAJOR (default) - matches your Strassen factors
     A_flat = A.flatten()  # NO order='F'!
     B_flat = B.flatten()  # NO order='F'!
-    C_flat = np.zeros(n * n)
+    # C_flat = np.zeros(n * n)
+    C_flat = np.zeros(n * p) #recntagular support
     
     R = U.shape[1]
     
@@ -127,25 +133,9 @@ def apply_decomposition_bilinear(A, B, U, V, W):
         b_r = np.dot(V[:, r], B_flat)
         C_flat += (a_r * b_r) * W[:, r]
     
-    return C_flat.reshape(n, n)  # NO order='F'!
+    # return C_flat.reshape(n, n)  # NO order='F'!
+    return C_flat.reshape(n, p)  # RECNTAGULAR SUPORTO
 
-    # n = A.shape[0]
-    # dim = n * n
-    # R = U.shape[1]
-
-    # A_flat = A.reshape(-1)
-    # B_flat = B.reshape(-1)
-
-    # C_flat = np.zeros(dim, dtype=np.int64)
-
-    # for r in range(R):
-    #     a_r = np.dot(U[:, r], A_flat)
-    #     b_r = np.dot(V[:, r], B_flat)
-    #     C_flat += W[:, r] * (a_r * b_r)
-
-    # print("Done applying decomposition for bilinear:\n")
-    # print(C_flat.reshape(n, n, order="F"))
-    # return C_flat.reshape(n, n, order="F")
 # def check_strassen_basis(U, V, W):
 #     n = 2
 #     ok = True
@@ -174,19 +164,20 @@ def apply_decomposition_bilinear(A, B, U, V, W):
 
 # ============ BASIS COMPARISON TESTS =============
 
-def basis_verification_cleaned(U, V, W, n):
+def basis_verification_cleaned(U, V, W, n, m, p):
     print("**** BASIS TESTS **** ")
-    total_tests = n * n * n * n
+    # total_tests = n * n * n * n
+    total_tests = n * m * m * p
     counter = 0
 
     for i in range(n):
-        for j in range(n):
-            A = np.zeros((n, n), dtype=np.int64)
+        for j in range(m):
+            A = np.zeros((n, m), dtype=np.int64)
             A[i, j] = 1
 
-            for k in range(n):
-                for l in range(n):
-                    B = np.zeros((n, n), dtype=np.int64)
+            for k in range(m):
+                for l in range(p):
+                    B = np.zeros((m, p), dtype=np.int64)
                     B[k, l] = 1
 
                     C_expected = A @ B
@@ -237,13 +228,13 @@ def random_matrix_verification_vs_ref(U, V, W, U_ref, V_ref, W_ref,
             counter += 1
     return counter / num_tests
 
-def random_matrix_verification(U, V, W, n, num_tests=50, seed=0):
+def random_matrix_verification(U, V, W, n, m, p, num_tests=50, seed=0):
     rng = np.random.default_rng(seed)
     print("**** RANDOM MATRIX TESTS ****")
     counter = 0
     for _ in range(num_tests):
-        A = rng.integers(-3, 4, size=(n, n), dtype=np.int64)
-        B = rng.integers(-3, 4, size=(n, n), dtype=np.int64)
+        A = rng.integers(-3, 4, size=(n, m), dtype=np.int64)
+        B = rng.integers(-3, 4, size=(m, p), dtype=np.int64)
 
         C_expected = A @ B
         C_actual = apply_decomposition_bilinear(A, B, U, V, W)
@@ -260,7 +251,7 @@ def random_matrix_verification(U, V, W, n, num_tests=50, seed=0):
 
 # ============ MAIN VERIFICATION PIPELINE =============
 
-def verify_decomposition_pipeline(U_float, V_float, W_float, n, num_random_tests=50):
+def verify_decomposition_pipeline(U_float, V_float, W_float, n, m, p, num_random_tests=50):
     # Step 0: projection / rounding first
     # U, V, W = project_to_integer_factors(U_float, V_float, W_float)
 
@@ -280,7 +271,7 @@ def verify_decomposition_pipeline(U_float, V_float, W_float, n, num_random_tests
 
 
     # Step 1: actual tensor correctness
-    ratio_matrix_entries_wrong, magnitude_of_errors = exact_tensor_check(U_half, V_half, W_half, n)
+    ratio_matrix_entries_wrong, magnitude_of_errors = exact_tensor_check(U_half, V_half, W_half, n, m, p)
     print(f"Exact tensor correctness check: {100*(1-ratio_matrix_entries_wrong):.2f}% entries correct, RMSE: {magnitude_of_errors:.2e}\n\n")
     # ================ if just checking EQUALS or NOT: ================
     # tensor_check = 0
@@ -294,12 +285,12 @@ def verify_decomposition_pipeline(U_float, V_float, W_float, n, num_random_tests
 
 
     # Step 2: basis verification
-    basis_score = basis_verification_cleaned(U_half, V_half, W_half, n)
+    basis_score = basis_verification_cleaned(U_half, V_half, W_half, n, m, p)
     # basis_score = basis_verification_vs_ref(U_half, V_half, W_half, U_ref, V_ref, W_ref, n) # using T_ref instead of canonical A@B as the basis for correctness, since the model is really trying to match T_ref not necessarily the canonical tensor.
 
 
     # Step 3: random tests
-    random_score = random_matrix_verification(U_half, V_half, W_half, n, num_random_tests)
+    random_score = random_matrix_verification(U_half, V_half, W_half, n, m, p, num_random_tests)
     # random_score = random_matrix_verification_vs_ref(U_half, V_half, W_half, U_ref, V_ref, W_ref, n, num_random_tests) # using T_ref instead of canonical A@B as the basis for correctness, since the model is really trying to match T_ref not necessarily the canonical tensor.
 
     # Done: return all metrics gathered from the suites of tests as a 4-tuple for LLMGE 
@@ -808,8 +799,12 @@ if __name__ == '__main__':
     factor_matrix_1 = factors_data['U']
     factor_matrix_2 = factors_data['V']
     factor_matrix_3 = factors_data['W']
+    # thisN = int(factors_data['N'])
+    # thisTargetRank = int(factors_data["R"])
     thisN = int(factors_data['N'])
-    thisTargetRank = int(factors_data["R"])
+    thisM = int(factors_data['M'])
+    thisP = int(factors_data['P'])
+    thisR = int(factors_data['R'])
 
     USE_ROUNDED = False
     def round_half(x):
@@ -870,7 +865,8 @@ if __name__ == '__main__':
 
 
     print("\n\n************************************ FULL EVAL PIPELINE START ************************************\n")
-    pipeline_scores = verify_decomposition_pipeline(U_ref, V_ref, W_ref, n=thisN, num_random_tests=10)
+    # pipeline_scores = verify_decomposition_pipeline(U_ref, V_ref, W_ref, n=thisN, m=thisM, p=thisP, num_random_tests=10)
+    pipeline_scores = verify_decomposition_pipeline(U_ref, V_ref, W_ref, n=thisN, m=thisM, p=thisP, num_random_tests=10)
     print("\n************************************ FULL EVAL PIPELINE END ************************************\n\n")
     
     fitness = pipeline_scores
