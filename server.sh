@@ -22,17 +22,6 @@ HOSTNAME_FILE=$(pwd)"/hostname.log"
 
 echo "Writing server hostname '$SERVER_HOSTNAME' to file: $HOSTNAME_FILE"
 echo "$SERVER_HOSTNAME" > "$HOSTNAME_FILE"
-
-# Check to kill any existing process on port 8137
-# echo "Checking for existing server on port 8137..."
-# existing_pid=$(lsof -ti:8137 2>/dev/null || true)
-# if [ ! -z "$existing_pid" ]; then
-#     echo "Killing existing process $existing_pid on port 8137"
-#     kill -9 $existing_pid
-#     sleep 2
-# fi
-
-
 echo "Starting LLM server on host: $SERVER_HOSTNAME"
 
 uv run uvicorn server:app --host $SERVER_HOSTNAME --port 8137 --workers 1

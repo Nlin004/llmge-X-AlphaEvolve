@@ -4,10 +4,12 @@ EVAL.PY - Evaluation script for LLMGE
 Evaluates tensor decomposition models (like the seed model) and returns fitness metrics.
 
 Fitness Objectives:
-1. Correctness ratio (0.0 to 1.0) - MAXIMIZE
-2. Number of multiplications (rank) - MINIMIZE
+1. Elementwise matrix equality ratio (0.0 to 1.0) - MINIMIZE
+2. RMSE of reconstructed tensor vs true tensor - MINIMIZE
+3. Number of basis multiplication tests passed - MAXIMIZE
+4. Number of random multiplication tests passed - MAXIMIZE
 
-Compatible with LLMGE structure.
+Compatible with LLMGE structure, if cfg configured for a 4-tuple fitness value
 """
 
 import argparse
@@ -70,8 +72,9 @@ def exact_tensor_check(U, V, W, n, m, p):  # Added m, p parameters!
             for k in range(p):
                 T_true[i*m+j, j*p+k, i*p+k] = 1
     
-
+    # This is CP decomposition! 
     T_hat = np.einsum('ir,jr,kr->ijk', U, V, W)
+    # T_hat = np.rint(T_hat)  # [1, 0, ...]  # do NOT round the final tensor!!!!
 
     print("\nTarget tensor (T_true):")
     print(T_true)
@@ -83,7 +86,7 @@ def exact_tensor_check(U, V, W, n, m, p):  # Added m, p parameters!
     incorrect = np.sum(~np.isclose(T_hat, T_true, atol=1e-10))
     fraction_incorrect = incorrect / total_entries
 
-    print(f"\nfrac: {incorrect}/{total_entries}")
+    print(f"\nfrac: {incorrect}/{total_entries} wrong")
 
     # Calculate RMSE as tie-breaker - "magnitude" of the errors in the tensor. 
     # All wrong but within magnitude of like 0.5 should still be more valid than same wrong but avg deviation of like 1-5.
@@ -117,7 +120,7 @@ def apply_decomposition_bilinear(A, B, U, V, W):
     n, m1 = A.shape  # A is n×m
     m2, p = B.shape  # B is m×p
 
-    assert m1 == m2, f"Incompatible dimensions: A is {n}×{m1}, B is {m2}×{p}"
+    assert m1 == m2, f"Incompatible dimensions: A is {n}×{m1}, B is {m2}×{p} and {m1}!={m2}."
     m = m1
     
     # ROW-MAJOR (default) - matches your Strassen factors
@@ -131,35 +134,10 @@ def apply_decomposition_bilinear(A, B, U, V, W):
     for r in range(R):
         a_r = np.dot(U[:, r], A_flat)
         b_r = np.dot(V[:, r], B_flat)
-        C_flat += (a_r * b_r) * W[:, r]
+        C_flat += (a_r * b_r) * W[:, r] # ONE MULTIPLCATION DONE! this loops R times, so we guarantee r mults.
     
     # return C_flat.reshape(n, n)  # NO order='F'!
     return C_flat.reshape(n, p)  # RECNTAGULAR SUPORTO
-
-# def check_strassen_basis(U, V, W):
-#     n = 2
-#     ok = True
-#     for i in range(n):
-#         for j in range(n):
-#             A = np.zeros((n,n), dtype=int)
-#             A[i,j] = 1
-#             for k in range(n):
-#                 for l in range(n):
-#                     B = np.zeros((n,n), dtype=int)
-#                     B[k,l] = 1
-
-#                     C_expected = A @ B
-#                     C_actual = apply_decomposition_bilinear(A,B,U,V,W)
-
-#                     if not np.array_equal(C_actual, C_expected):
-#                         print("FAIL at A[{},{}], B[{},{}]".format(i,j,k,l))
-#                         print("A:\n", A)
-#                         print("B:\n", B)
-#                         print("C_expected:\n", C_expected)
-#                         print("C_actual:\n", C_actual)
-#                         ok = False
-#     print("All basis tests pass?" , ok)
-#     return ok
 
 
 # ============ BASIS COMPARISON TESTS =============
@@ -183,9 +161,9 @@ def basis_verification_cleaned(U, V, W, n, m, p):
                     C_expected = A @ B
                     C_actual = apply_decomposition_bilinear(A, B, U, V, W).astype(np.int64)
 
-                    print("\nC_expected:\n", C_expected)
-                    print("C_actual:\n", C_actual)
-                    print("-"*20)
+                    # print("\nC_expected:\n", C_expected)
+                    # print("C_actual:\n", C_actual)
+                    # print("-"*20)
 
                     if np.array_equal(C_actual, C_expected):
                         counter += 1
@@ -239,9 +217,9 @@ def random_matrix_verification(U, V, W, n, m, p, num_tests=50, seed=0):
         C_expected = A @ B
         C_actual = apply_decomposition_bilinear(A, B, U, V, W)
 
-        print("C_expected:\n", C_expected)
-        print("C_actual:\n", C_actual)
-        print("-"*20)
+        # print("C_expected:\n", C_expected)
+        # print("C_actual:\n", C_actual)
+        # print("-"*20)
 
         if np.array_equal(C_actual, C_expected):
             counter += 1
@@ -307,18 +285,8 @@ def compute_reference_tensor(U_ref, V_ref, W_ref):
     T_ref = np.einsum('ir,jr,kr->ijk', U_ref, V_ref, W_ref)
     return T_ref
 
-
-
-
-
-
-
-
-
-
-
-
-
+# Debugging functions - solve for correct W given U V and the matrices A B
+# ==============================================================================
 def compute_Ms(U, V, A, B):
     A_flat = A.flatten().astype(float)
     B_flat = B.flatten().astype(float)
@@ -353,299 +321,7 @@ def solve_W_row_for_entry(U, V, entry_idx):
     # Solve least-squares; for exact integer solution you can round
     x, *_ = np.linalg.lstsq(eqs, rhs, rcond=None)
     return x
-
-
-
-
-
-
-
-
-
-# BELOW 2 FUNCTIONS ARE FOR CHECKING TENSOR REPRESENTATION CORRECTNESS.
-
-# # ===================== Helper to generate the matmul tensor =====================
-
-# def generate_matmul_tensor(n):
-#     dim = n * n
-#     T = np.zeros((dim, dim, dim), dtype=np.int32)
-
-#     for i in range(n):
-#         for j in range(n):
-#             for k in range(n):
-#                 T[i*n + j, j*n + k, k*n + i] = 1
-
-#     return T
-
-# # ===================== VERIFICATION VIA *TENSOR DECOMP* CORRECTNESS: =====================
-
-# def fundamental_correctness_check(decomposition, n, m, p_dim):
-#     """
-#     EXACT AlphaEvolve tensor verification.
-#     """
-#     U, V, W = decomposition
-
-#     matmul_tensor = np.zeros((n*m, m*p_dim, p_dim*n), dtype=np.int32)
-#     for i in range(n):
-#         for j in range(m):
-#             for k in range(p_dim):
-#                 matmul_tensor[i*m + j, j*p_dim + k, k*n + i] = 1
-#     # matmul_tensor = generate_matmul_tensor(n)
-
-#     constructed_tensor = np.einsum('ir,jr,kr->ijk', U, V, W)
-#     # constructed_tensor = np.rint(constructed_tensor).astype(np.int32)
-#     constructed_tensor_complete = np.rint(constructed_tensor).astype(np.int32)
-#     # DO NOT ROUND!!!!
-#     # err = np.max(np.abs(constructed_tensor - matmul_tensor))
-#     # if err > 1e-8:
-#     #     return False
-
-#     print("TRUTH:\n")
-#     print(matmul_tensor)
-#     print("Not Rounded:\n")
-#     print(constructed_tensor)
-#     print("Rounded:\n")
-#     print(constructed_tensor_complete)
-
-#     return np.array_equal(constructed_tensor_complete, matmul_tensor)
-
-
-
-
-
-# def apply_decomposition(A, B, U, V, W):
-#     """
-#     Apply bilinear algorithm defined by (U, V, W).
-#     """
-#     n = A.shape[0]
-#     A_flat = A.reshape(-1)
-#     B_flat = B.reshape(-1)
-#     C_flat = np.zeros(n * n)
-
-#     R = U.shape[1]
-
-#     for r in range(R):
-#         a_r = np.dot(U[:, r], A_flat)
-#         b_r = np.dot(V[:, r], B_flat)
-#         C_flat += (a_r * b_r) * W[:, r]
-
-#     return C_flat.reshape(n, n, order="F") # ensure column-major order!!!!!
-
-    
-# def basis_verification(U, V, W, n, atol=1e-5):
-#     """
-#     Verify decomposition on all n^2 by n^2 basis matrix pairs.
-#     Prints detailed comparison for each test.
-#     """
-
-#     # Round to half-integers (AlphaEvolve approach)
-#     # U = np.round(U * 2) / 2
-#     # V = np.round(V * 2) / 2
-#     # W = np.round(W * 2) / 2
-
-
-
-#     total_tests = n * n * n * n
-#     passed_tests = 0
-#     failed_tests = []
-    
-#     print("\n" + "="*100)
-#     print(f"BASIS VERIFICATION: Testing all {total_tests} basis matrix pairs for {n}×{n} matrices")
-#     print("="*100)
-    
-#     test_num = 0
-    
-#     for i in range(n):
-#         for j in range(n):
-#             # Create basis matrix A with single 1 at position (i,j)
-#             A = np.zeros((n, n))
-#             A[i, j] = 1.0
-            
-#             for k in range(n):
-#                 for l in range(n):
-#                     test_num += 1
-                    
-#                     # Create basis matrix B with single 1 at position (k,l)
-#                     B = np.zeros((n, n))
-#                     B[k, l] = 1.0
-                    
-#                     # Expected result
-#                     C_expected = A @ B
-                    
-#                     # Actual result from decomposition
-#                     # C_actual = apply_decomposition(A, B, U, V, W)  # Use ROUNDED factors?
-#                     C_actual = apply_decomposition_to_multiply(A, B, U, V, W)  # Use original factors without rounding for actual multiplication result
-                    
-                    
-#                     # Calculate error
-#                     error_matrix = C_actual - C_expected
-#                     max_error = np.max(np.abs(error_matrix))
-                    
-#                     # Check if passes
-#                     passes = np.allclose(C_actual, C_expected, atol=atol)
-                    
-#                     if passes:
-#                         passed_tests += 1
-#                     else:
-#                         failed_tests.append((test_num, i, j, k, l, max_error))
-                    
-#                     # Print detailed comparison
-#                     status = "PASS" if passes else "FAIL"
-#                     # print(f"\nTest {test_num}/{total_tests}: A[{i},{j}]=1 × B[{k},{l}]=1  →  {status}")
-#                     # print(f"{'─'*100}")
-                    
-#                     # Side-by-side comparison
-#                     # print(f"Expected C = A @ B:          Actual C (from decomposition):")
-#                     for row_idx in range(n):
-#                         expected_row = "  ".join([f"{C_expected[row_idx, col_idx]:7.4f}" for col_idx in range(n)])
-#                         actual_row = "  ".join([f"{C_actual[row_idx, col_idx]:7.4f}" for col_idx in range(n)])
-#                         # print(f"  [{expected_row}]    [{actual_row}]")
-                    
-#                     # Error matrix
-#                     # print(f"\nError = Actual - Expected:")
-#                     for row_idx in range(n):
-#                         error_row = "  ".join([f"{error_matrix[row_idx, col_idx]:+7.4f}" for col_idx in range(n)])
-#                         # print(f"  [{error_row}]")
-                    
-#                     # print(f"Max error: {max_error:.6e}  (tolerance: {atol:.6e})")
-                    
-#                     # if not passes:
-#                     #     print(f"FAILED: Error {max_error:.6e} exceeds tolerance {atol:.6e}")
-    
-    # Summary
-    # print("\n" + "="*100)
-    # print("VERIFICATION SUMMARY")
-    # print("="*100)
-    # print(f"Total tests: {total_tests}")
-    # print(f"Passed: {passed_tests}/{total_tests} ({100*passed_tests/total_tests:.1f}%)")
-    # print(f"Failed: {len(failed_tests)}/{total_tests} ({100*len(failed_tests)/total_tests:.1f}%)")
-    # ratio = passed_tests / total_tests
-
-    # if failed_tests:
-    #     print(f"\nVERIFICATION FAILED")
-    #     print(f"\nFailed tests (first 10):")
-    #     for test_num, i, j, k, l, max_error in failed_tests[:10]:
-    #         print(f"  Test {test_num}: A[{i},{j}]=1 × B[{k},{l}]=1  →  Max error: {max_error:.6e}")
-        
-    #     if len(failed_tests) > 10:
-    #         print(f"  ... and {len(failed_tests) - 10} more failures")
-    
-    # else:
-    #     print(f"VERIFICATION PASSED - All {total_tests} basis tests correct!")
-
-    # # for LLMGE: return the ratio of passed tests as a fitness metric (higher is better), so like 14/16 means only a couple failed.
-    # return ratio
-
-
-
-# ===================== HELPER FUNCTION TO CONVERT TENSOR FACTORS TO MULT: =====================
-
-# def apply_decomposition_to_multiply(A, B, factor_matrix_1, factor_matrix_2, factor_matrix_3):
-#     """
-#     Apply tensor decomposition to multiply matrices A and B.
-    
-#     The decomposition represents the matrix multiplication tensor.
-#     For <n,n,n> multiplication, the factors are (n²×R) matrices.
-    
-#     Key insight: Each column r in the factors represents one "multiplication":
-#     - factor_matrix_1[:, r] selects elements from A (flattened)
-#     - factor_matrix_2[:, r] selects elements from B (flattened)
-#     - factor_matrix_3[:, r] determines where the product goes in C (flattened)
-    
-#     Args:
-#         A: Matrix of shape (n, n)
-#         B: Matrix of shape (n, n)
-#         factor_matrix_1: Shape (n^2, R)
-#         factor_matrix_2: Shape (n^2, R)
-#         factor_matrix_3: Shape (n^2, R)
-    
-#     Returns:
-#         C: Result matrix of shape (n, n)
-#     """
-#     n = A.shape[0]
-#     R = factor_matrix_1.shape[1]  # Number of rank-1 components (multiplications)
-    
-#     # Flatten input matrices
-#     A_flat = A.flatten()  # Shape: (n2,)
-#     B_flat = B.flatten()  # Shape: (n2,)
-#     C_flat = np.zeros(n * n)  # Shape: (n2,)
-    
-#     # Apply each rank-1 component
-#     for r in range(R):
-#         u = factor_matrix_1[:, r]  # Select from A
-#         v = factor_matrix_2[:, r]  # Select from B
-#         w = factor_matrix_3[:, r]  # Contribute to C
-        
-#         # One scalar multiplication
-#         Au = np.dot(u, A_flat)
-#         Bv = np.dot(v, B_flat)
-#         scalar = Au * Bv
-        
-#         # Add contribution to result
-#         C_flat += scalar * w
-
-#     C = C_flat.reshape(n, n, order="F")  #ROW MAJOR ORDER!!!!!
-#     return C
-
-# # ===================== VERIFICATION VIA RANDOM MULTIPLICATION TESTS: =====================
-# def verify_decomposition(factor_matrix_1, factor_matrix_2, factor_matrix_3, 
-#                          n=2, num_tests=50, tol=2e-1):
-#     """
-#     Verify that the decomposition correctly multiplies matrices.
-    
-#     Tests on random matrices and returns detailed statistics.
-    
-#     Args:
-#         factor_matrix_1, factor_matrix_2, factor_matrix_3: Decomposition factors
-#         n: Matrix dimension
-#         num_tests: Number of random tests
-#         tol: Error tolerance
-    
-#     Returns:
-#         correct_ratio: Fraction of tests passed (0.0 to 1.0)
-#         num_correct: Number of tests passed
-#         num_total: Total tests
-#         max_error: Maximum error observed
-#         avg_error: Average error
-#         num_multiplications: Rank of decomposition
-#     """
-#     num_correct = 0
-#     max_error = 0.0
-#     total_error = 0.0
-    
-#     # Count multiplications (rank of decomposition)
-#     num_multiplications = factor_matrix_1.shape[1]
-    
-#     for _ in range(num_tests):
-#         # Generate random test matrices
-#         A = np.random.randn(n, n)
-#         B = np.random.randn(n, n)
-        
-#         # Ground truth
-#         C_expected = A @ B
-
-#         # print("\nGROUND TRUTH MULT")
-#         # print(C_expected)
-        
-#         # print("\nACTUAL PRODUCT:")
-#         # Use decomposition
-#         C_result = apply_decomposition_to_multiply(
-#             A, B, factor_matrix_1, factor_matrix_2, factor_matrix_3
-#         )
-        
-#         # print(C_result)
-#         # Compute error
-#         error = np.max(np.abs(C_result - C_expected))
-#         max_error = max(max_error, error)
-#         total_error += error
-        
-#         if error <= tol:
-#             num_correct += 1
-    
-#     correct_ratio = num_correct / num_tests
-#     avg_error = total_error / num_tests
-#     print(f"Avg error over {num_tests} tests: {avg_error:.2e}, Max error: {max_error:.2e}")
-#     return correct_ratio, num_correct, num_tests, max_error, avg_error, num_multiplications
+# ========================================================================
 
 
 def get_args():
@@ -722,55 +398,25 @@ if __name__ == '__main__':
     try:
         # Call the model's main function
         # It will create its own experiment directory and save results
-        # model_module.main()
         old_argv = sys.argv
-        # sys.argv = [
-        #     old_argv[0],
-        #     "--save_dir", str(run_dir),
-        #     "--N", str(args.N),
-        #     "--R", str(args.R),
-        # ]
+
         sys.argv = [
             old_argv[0],
             "--save_dir", str(run_dir),
         ]
-
-
         # Make sure we're in the right directory
         os.chdir(script_directory)
-
-        
         model_module.main()
 
-        
-        # The model saves results in its own exp directory
-        # We need to find the most recent one
-        # ===========================
-        # trained_dir = p("trained")
-        # exp_dirs = sorted([d for d in trained_dir.iterdir() if d.is_dir() and d.name.startswith("exp")])
-        
-        # if not exp_dirs:
-        #     raise FileNotFoundError("No experiment directories found")
-        
-        # latest_exp_dir = exp_dirs[-1]
-        
-        # # Load the saved factors
-        # factors_file = latest_exp_dir / "factors.npz"
-        
-        # if not factors_file.exists():
-        #     raise FileNotFoundError(f"No factors.npz found in {latest_exp_dir}")
-
-        # instead: -------------
+        # Find factors file, load it.
         factors_file = run_dir / "factors.npz"
         if not factors_file.exists():
             raise FileNotFoundError(f"No factors found in {run_dir}")
-
-        # ===========================
         
         factors_data = np.load(factors_file)
         print(f"\nLoaded factors from {factors_file}")
 
-    except Exception as e:
+    except Exception as e: # if can't find factors for some reason, or some other error.
         print(f"\nERROR loading factors: {e}")
         print(f"Looked for factors at: {factors_file}")
         print(f"run_dir contents:")
@@ -791,8 +437,6 @@ if __name__ == '__main__':
                 if (latest / "factors.npz").exists():
                     print(f"  [GOOD] factors.npz exists in {latest}")
         
-
-    
     # ========================================================================
     # VERIFY CORRECTNESS
     # ========================================================================
@@ -843,9 +487,6 @@ if __name__ == '__main__':
     print("Factor matrix 2 (V):\n", factor_matrix_2)
     print("Factor matrix 3 (W):\n", factor_matrix_3)
 
-    # U_ref = np.rint(factor_matrix_1).astype(int)  # known good U from strassen
-    # V_ref = np.rint(factor_matrix_2).astype(int)  # known good V from strassen
-    # W_ref = np.rint(factor_matrix_3).astype(int)  # known good W from strassen
     U_ref = factor_matrix_1
     V_ref = factor_matrix_2
     W_ref = factor_matrix_3
@@ -861,6 +502,8 @@ if __name__ == '__main__':
     # print("The W i have already:")
     # print(W_ref)
     # print("EQUALITY? ", np.array_equal(W_fixed_rounded, W_ref))
+    # # testing a manual W passed in
+    # W_ref = W_fixed_rounded
 
 
 
@@ -871,89 +514,16 @@ if __name__ == '__main__':
     
     fitness = pipeline_scores
     fitness_0, fitness_1, fitness_2, fitness_3 = fitness
-    # ============= USE THIS FOR VERIFICATION VIA RANDOM MATRIX MULT CHECKS! ============
-    # correct_ratio, num_correct, num_total, max_error, avg_error, num_multiplications = verify_decomposition(
-    #     factor_matrix_1, factor_matrix_2, factor_matrix_3,
-    #     n=thisN,
-    #     num_tests=args.num_tests
-    # )    
-    # # print("PERCENTAGE CORRECT!!!!\n")
-    # # print(correct_ratio)
-    # standard_mults = thisN ** 3  # Standard algorithm for n×n matrices
-    
+
     # ========================================================================
     # CALCULATE FITNESS
     # ========================================================================
-    ONE_FITNESS = False
-    # if ONE_FITNESS:
-
-    #     # use is_correct from tensor verification for a simple fitness function
-        
-    #     if correct_ratio == 1.0:
-    #         # Perfect: optimize for performance
-    #         # Scale num_multiplications to be comparable to small differences in ratio
-    #         fitness = num_multiplications * 1000
-    #         status = "FULLY CORRECT"
-            
-    #     elif correct_ratio >= 0.8:
-    #         # Mostly correct: medium penalty
-    #         penalty = (1.0 - correct_ratio) * 100000
-    #         fitness = penalty + num_multiplications * 1000 + avg_error * 10000
-    #         status = f"MOSTLY CORRECT ({correct_ratio:.0%})"
-            
-    #     else:
-    #         # Mostly wrong: large penalty
-    #         penalty = (1.0 - correct_ratio) * 1000000
-    #         fitness = penalty + avg_error * 10000 + num_multiplications
-    #         status = f"INCORRECT ({correct_ratio:.0%})"
-    # else:
-    #     # Multi-objective: return tuple (lower is better for both)
-    #     fitness_0 = basis_ratio
-    #     fitness_1 = correct_ratio  # Maximize correct problems solved (1.0 = perfect, 0.0 = all wrong)
-    #     fitness_2 = num_multiplications  # Minimize rank (7 = target)
-    #     fitness = (fitness_0, fitness_1, fitness_2)
-    # ========================================================================
-    # PRINT RESULTS
-    # ========================================================================
-    
-    
-    
-    # ===========================
-    # print(f"\nCorrectness (using seed model's verification):")
-    # if is_correct:
-    #    fitness = num_multiplications * 1000  # e.g., 7000 for rank-7
-    # else:
-    #    fitness = 1000000 + num_multiplications  # e.g., 1000007 if wrong
-    # ===========================
-
-    # ============================
-    
-    print(f"\nFitness for LLMGE:")
-    
-    if ONE_FITNESS:
-        if correct_ratio == 1.0:
-            print(f"  Breakdown: {num_multiplications} mults × 1000")
-        elif correct_ratio >= 0.8:
-            penalty = (1.0 - correct_ratio) * 100000
-            print(f"  Breakdown: {penalty:.2f} (penalty) + {num_multiplications * 1000} (mults) + {avg_error * 10000:.2f} (error)")
-        else:
-            penalty = (1.0 - correct_ratio) * 1000000
-            print(f"  Breakdown: {penalty:.2f} (penalty) + {avg_error * 10000:.2f} (error) + {num_multiplications} (mults)")
-
-        print(f"\n{fitness:.4f}")
-        # print(f"# Breakdown: ratio={correct_ratio:.4f}, rank={num_multiplications}, error={avg_error:.2e}")
-        
-        # Save results
-        results_text = f"{fitness:.4f}"
-    else: 
-        print("=====================================================================")
-        print(f"Fraction of literal matrix entries WRONG (0 is identical match): {fitness_0:.4f}")
-        print(f"Magnitude of errors (lower is better): {fitness_1:.4f}")
-        print(f"Basis score ratio (higher is better): {fitness_2:.4f}")
-        print(f"Random multiplication score (higher is better): {fitness_3:.4f}")
-        results_text = f"{fitness_0:.4f}, {fitness_1:.4f}, {fitness_2:.4f}, {fitness_3:.4f}"
-
-        
+    print("==================================== [ FITNESS ] ====================================")
+    print(f"Fraction of literal matrix entries WRONG (0 is identical match): {fitness_0:.4f}")
+    print(f"Magnitude of errors (lower is better): {fitness_1:.4f}")
+    print(f"Basis score ratio (higher is better): {fitness_2:.4f}")
+    print(f"Random multiplication score (higher is better): {fitness_3:.4f}")
+    results_text = f"{fitness_0:.4f}, {fitness_1:.4f}, {fitness_2:.4f}, {fitness_3:.4f}"
     print("="*120)
 
     filename = os.path.abspath(f'results/{gene_id}_results.txt')
@@ -963,7 +533,7 @@ if __name__ == '__main__':
     with open(filename, 'w') as file:
         file.write(results_text)
     
-    print(results_text)
+    print(f"({results_text})")
     print(f"\nResults written to {filename}")
     print('='*120)
     print('job done')

@@ -1,8 +1,11 @@
 import argparse
 import os
+import sys
 import jax
 import jax.numpy as jnp
 import optax
+from typing import List, Optional
+from progressGraph import create_sparkline_full_history
 import numpy as np
 from pathlib import Path as p
 from os.path import join as pj
@@ -113,6 +116,7 @@ def generate_matmul_tensor(n: int, m: int, p: int) -> jnp.ndarray: # THIS IS FOR
     
     return T
 
+
 # --- 3. Configuration ---
 
 def get_args():
@@ -196,17 +200,17 @@ def main():
         device_kind = "unknown"
 
 
-    print(f"\n\n\n+================================[ Begin {thisFileName[:-3].upper()} Output ]================================+")
+    print(f"\n\n\n+====================================[ Begin {thisFileName[:-3].upper()} Output ]====================================+")
     print(f"    Running AlphaTensor-style Search")
     # print(f"    Matrix Size N: {N} (Tensor Dim: {dim})")
     print(f"    Problem: {N}×{M} × {M}×{P} => {N}×{P}")
-    print(f"    Tensor dims: ({dim_A}, {dim_B}, {dim_C})")
+    print(f"    Tensor Representation: <{N}, {M}, {P}>")
     print(f"    Target Rank R: {R}")
     print(f"    Batch Size: {args.batch_size}")
     print(f"    Iterations: {args.iterations}")
     print(f"    Learning Rate: {args.lr}")
     print(f"    Device: {device_kind}")
-    print("    "+"=" * 70)
+    print("    "+"=" * 90)
 
     # 1. Target
     # target_tensor = generate_matmul_tensor(N)
@@ -331,11 +335,6 @@ def main():
 
     def init_params(k):
         k1, k2, k3 = jax.random.split(k, 3)
-        # return [
-        #     jax.random.normal(k1, (dim, R)),
-        #     jax.random.normal(k2, (dim, R)),
-        #     jax.random.normal(k3, (dim, R))
-        # ]
         return [
             jax.random.normal(k1, (dim_A, R)),
             jax.random.normal(k2, (dim_B, R)),
@@ -345,18 +344,73 @@ def main():
     # Create batch of params and optimizer states
     batch_params = jax.vmap(init_params)(keys) 
     batch_opt_state = jax.vmap(optimizer.init)(batch_params)
+
 # --OPTION--
     # If you are an LLM tasked with modifying the below code, consider 
     # 5. Training Loop
     # ============================WITHOUT ROUNDING====================================
-    print("\n    Starting optimization...")
-    
+    loss_history = []
+    bar_width = 30
+
+    spark_width = 30  # Wider sparkline for better visibility
+
+    print("\n    Starting optimization...\n")
+
+    last_checkpoint = -args.print_every  # Initialize to force first checkpoint
+
     for i in range(args.iterations):
         batch_params, batch_opt_state, batch_losses = jax.vmap(step)(batch_params, batch_opt_state)
+        best_loss = float(jnp.min(batch_losses))
+        loss_history.append(best_loss)
         
+        # Update progress bar every 10 steps
+        if i % 10 == 0 or i == args.iterations - 1:
+            progress = (i + 1) / args.iterations
+            filled = int(bar_width * progress)
+            bar = '█' * filled + '░' * (bar_width - filled)
+            
+            # Create sparkline showing FULL history
+            spark = create_sparkline_full_history(loss_history, width=spark_width)
+            
+            # Write progress bar (this line will be overwritten)
+            sys.stdout.write(
+                f'\r    [{bar}] {progress:>5.1%} | '
+                f'Step {i:5d}/{args.iterations} | '
+                f'Loss: {best_loss:.6f} | '
+                f'{spark}'
+            )
+            sys.stdout.flush()
+        
+        # Print checkpoint every print_every steps
+        # This needs to happen AFTER the progress bar update to avoid overwriting
         if i % args.print_every == 0:
-            best_loss = jnp.min(batch_losses)
+            # Clear the current line completely
+            sys.stdout.write('\r' + ' ' * 150 + '\r')
+            # Print checkpoint on its own line
             print(f"       Step {i}: Best Loss = {best_loss:.6f}")
+            
+            # Redraw the progress bar immediately after checkpoint
+            if i < args.iterations - 1:  # Don't redraw if this is the last step
+                progress = (i + 1) / args.iterations
+                filled = int(bar_width * progress)
+                bar = '█' * filled + '░' * (bar_width - filled)
+                spark = create_sparkline_full_history(loss_history, width=spark_width)
+                sys.stdout.write(
+                    f'\r    [{bar}] {progress:>5.1%} | '
+                    f'Step {i:5d}/{args.iterations} | '
+                    f'Loss: {best_loss:.6f} | '
+                    f'{spark}'
+                )
+                sys.stdout.flush()
+
+    # print("\n    Starting optimization...")
+    
+    # for i in range(args.iterations):
+    #     batch_params, batch_opt_state, batch_losses = jax.vmap(step)(batch_params, batch_opt_state)
+        
+    #     if i % args.print_every == 0:
+    #         best_loss = jnp.min(batch_losses)
+    #         print(f"       Step {i}: Best Loss = {best_loss:.6f}")
 
     # ============================WITH ROUNDING PENALTY====================================
     # # Training Loop with Annealing
@@ -391,8 +445,8 @@ def main():
     best_params = jax.tree.map(lambda x: x[min_loss_idx], batch_params)
     final_loss = float(batch_losses[min_loss_idx])
 
-    print("   "+"-" * 30)
-    print(f"    Final Best Loss: {final_loss:.6f}")
+
+    print(f"\n\n    Final Best Loss: {final_loss:.6f}")
 
     # Save results to file
     results_file = pj(exp_dir, "results.txt")
