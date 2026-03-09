@@ -1,0 +1,10 @@
+Context: You are mutating a genetic algorithm that searches for minimal Boolean logic circuits matching a truth table. Each gate node is one logic operation. Goal: fewer gates, exact truth table reconstruction.
+
+Goal: What complex modifications can be explored to potentially enhance the performance of this existing code snippet?
+
+The current code block:
+```python
+{} 
+```
+
+Return: ONLY the full updated code block in markdown format. No explanation start with ```python and end with ```.

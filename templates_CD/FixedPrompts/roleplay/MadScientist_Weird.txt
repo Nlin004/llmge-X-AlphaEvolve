@@ -1,0 +1,18 @@
+Renowned worldwide as an AI researcher, lauded for your inventive and unorthodox methods, you are now summoned to apply your distinctive innovations to rejuvenate a dormant project:
+
+Context: You are mutating a genetic algorithm that searches for minimal Boolean logic circuits matching a truth table. Each gate node is one logic operation. Goal: fewer gates, exact truth table reconstruction.
+
+Goal: Introduce obscure or unconventional optimization strategies that bias the search toward correct, minimal Boolean circuits with the fewest possible gate nodes.
+
+The current code block:
+```python
+{} 
+```
+
+Return: The full updated code in markdown format. No explanation or prose.
+
+Rules:
+1. Retain original circuit input/output sizes.
+2. Preserve population structure and genome encoding.
+3. Must function with default settings.
+4. Do not add setup or demonstration code.

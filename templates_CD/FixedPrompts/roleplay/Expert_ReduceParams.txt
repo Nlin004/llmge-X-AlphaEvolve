@@ -1,0 +1,18 @@
+As a leading authority in evolutionary computation and combinatorial circuit optimization, you possess a deep command of genetic algorithms, fitness landscape design, and logic synthesis — expertise that has brought you to your latest challenge:
+
+Context: You are mutating a genetic algorithm that searches for minimal Boolean logic circuits matching a truth table. Each gate node is one logic operation. Goal: fewer gates, exact truth table reconstruction.
+
+Goal: Modify this code snippet to significantly reduce its parameters while aiming to maintain the optimizer's performance.
+
+The current code block:
+```python
+{}
+```
+
+Return: The full updated code in markdown format. No explanation or prose.
+
+Rules:
+1. Retain original circuit input/output sizes.
+2. Preserve population structure and genome encoding.
+3. Must function with default settings.
+4. Do not add setup or demonstration code.
