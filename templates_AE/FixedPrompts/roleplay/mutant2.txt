@@ -1,8 +1,44 @@
 python
-import jax.numpy as jnp
+import jax
+from jax.experimental import stax
 
-def cp_decomposition(matrix):
-    #... (rest of the function remains the same)
+# Define the matrix multiplication tensor
+def matmul_tensor(A, B):
+    return np.dot(A, B)
+
+# Initialize the parameters (weights) of the model
+params = np.random.rand(784, 10)
+A = params
+B = np.random.rand(10, 10)
+
+# Create the matrix multiplication tensor
+tensor = matmul_tensor(A, B)
+
+# Define the loss function
+def loss(params):
+    reconstructed_tensor = matmul_tensor(params, B)
+    return np.sum(np.abs(tensor - reconstructed_tensor))
+
+# Define the optimizer
+opt_init, opt_update, get_params = stax.serial(
+    stax.L2Regularization(0.01),
+    stax.Adam(learning_rate=0.001)
+)
+
+# Initialize the optimizer state
+_, init_fn, apply_fn = stax.serial(
+    opt_init,
+    get_params
+)
+init_state = init_fn(jax.random.PRNGKey(42), (784, 10))
+state = init_state
+
+# Train the model
+for i in range(1000):
+    grads = jax.grad(loss)(state)
+    state = opt_update(i, grads, state)
+    if i % 100 == 0:
+        print(f"Iteration {i}, Loss: {loss(state)}")
 
 ```python
 {}

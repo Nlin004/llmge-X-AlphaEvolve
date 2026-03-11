@@ -1,29 +1,35 @@
 python
 import jax.numpy as jnp
 
-def cp_decomposition(matrix):
-    # Initialize random weights for each factor matrix
-    num_factors = 3
-    ranks = [2, 2, 2]
-    weights = [jnp.random.rand(r) for r in ranks]
+def cp_decomposition(matrix, num_terms):
+    # Initialize random weights and factors for each rank-1 term
+    weights = jnp.array([jnp.random.uniform(0, 1) for _ in range(num_terms)])
+    factors = [jnp.random.uniform(0, 1, size=(matrix.shape[0],)) for _ in range(num_terms)]
 
-    # Perform iterative updates using gradient descent
+    # Define the loss function (mean squared error)
+    def loss(weights, factors):
+        reconstruction = jnp.sum([w * jnp.outer(f, f) for w, f in zip(weights, factors)], axis=0)
+        return jnp.mean((reconstruction - matrix) ** 2)
+
+    # Perform gradient descent optimization
     learning_rate = 0.01
     iterations = 1000
-    for _ in range(iterations):
-        # Compute the predicted tensor
-        predicted_tensor = jnp.einsum('ij,jk,kl->ikl', weights[0], weights[1], weights[2])
+    opt_state = jax.optimizers.init_optimize(
+        [(weights, factors)],
+        jax.optimizers.adam(learning_rate),
+    )
+    for i in range(iterations):
+        grads = jax.grad(loss)(weights, factors)
+        opt_state = jax.optimizers.apply_updates(opt_state, grads)
 
-        # Compute the loss (mean squared error)
-        loss = jnp.mean((matrix - predicted_tensor) ** 2)
+    return weights, factors
 
-        # Backpropagate the gradients
-        grads = jax.grad(loss, weights)
-
-        # Update the weights using gradient descent
-        weights = [w - learning_rate * g for w, g in zip(weights, grads)]
-
-    return weights
+# Example usage
+matrix = jnp.array([[1, 2], [3, 4]])
+num_terms = 2
+weights, factors = cp_decomposition(matrix, num_terms)
+print("Weights:", weights)
+print("Factors:", factors)
 
 ```python
 {}

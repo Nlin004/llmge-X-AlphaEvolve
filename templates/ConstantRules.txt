@@ -1,8 +1,9 @@
 1. Retain original class names.
-2. Format the code in Markdown.
-3. Exclude setup/demonstration code.
-4. Retain original tensor input/output sizes.
-5. Provide full code.
-6. Must function with default settings.
+2. Retain all ORIGINAL levels of indentation.
+3. Format the code in Markdown.
+4. Exclude setup/demonstration code.
+5. Retain original tensor input/output sizes.
+6. Provide full code.
+7. Must function with default settings.
 
 A: Let us think step by step

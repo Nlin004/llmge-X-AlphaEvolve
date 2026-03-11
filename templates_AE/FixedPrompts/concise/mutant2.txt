@@ -1,13 +1,27 @@
 python
-def optimize_cp_decomposition(optimizer, X):
-    #... (rest of the function remains the same)
-    for i in range(num_iterations):
-        #... (rest of the loop remains the same)
-        if np.linalg.norm(grad) > 0.01:
-            learning_rate = 0.001
-        else:
-            learning_rate = 0.0001
-        #... (rest of the loop remains the same)
+import jax.numpy as jnp
+
+def cp_decomposition(matrix):
+    # Initialize random weights for each rank-1 term
+    num_terms = 10
+    weights = jnp.array([jnp.random.rand() for _ in range(num_terms)])
+
+    # Define the loss function
+    def loss(weights, matrix):
+        reconstructed_matrix = jnp.sum(
+            [w * jnp.outer(jnp.ones((matrix.shape[0], 1)), jnp.ones((matrix.shape[1], 1))) 
+             for w in weights],
+            axis=0)
+        return jnp.mean((reconstructed_matrix - matrix) ** 2)
+
+    # Perform gradient descent optimization
+    learning_rate = 0.01
+    iterations = 1000
+    for i in range(iterations):
+        gradients = jax.grad(loss, argnums=0)(weights, matrix)
+        weights -= learning_rate * gradients
+
+    return weights
 
 ```python
 {}
