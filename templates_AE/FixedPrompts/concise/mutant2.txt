@@ -1,27 +1,11 @@
-python
-import jax.numpy as jnp
+Here is a rephrased version of your code with improvements:
 
-def cp_decomposition(matrix):
-    # Initialize random weights for each rank-1 term
-    num_terms = 10
-    weights = jnp.array([jnp.random.rand() for _ in range(num_terms)])
+### CP Decomposition using JAX
 
-    # Define the loss function
-    def loss(weights, matrix):
-        reconstructed_matrix = jnp.sum(
-            [w * jnp.outer(jnp.ones((matrix.shape[0], 1)), jnp.ones((matrix.shape[1], 1))) 
-             for w in weights],
-            axis=0)
-        return jnp.mean((reconstructed_matrix - matrix) ** 2)
+The following Python code performs a Canonical Polyadic (CP) decomposition on a given matrix using the JAX library.
 
-    # Perform gradient descent optimization
-    learning_rate = 0.01
-    iterations = 1000
-    for i in range(iterations):
-        gradients = jax.grad(loss, argnums=0)(weights, matrix)
-        weights -= learning_rate * gradients
+#### Code
 
-    return weights
 
 ```python
 {}

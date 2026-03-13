@@ -792,7 +792,7 @@ def load_checkpoint(folder_name="checkpoints", checkpoint_file=None):
         return None, None
     if checkpoint_file is None:
         checkpoint_files = sorted(glob.glob(os.path.join(folder_name, 'checkpoint_gen_*.pkl')), key=extract_generation, reverse=True)
-        if checkpoint_file is not None:
+        if checkpoint_files is not None:
             checkpoint_file = os.path.split(checkpoint_files[0])[1]
         else:
             checkpoint_file = None

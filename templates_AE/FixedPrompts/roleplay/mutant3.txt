@@ -1,20 +1,8 @@
 python
 import jax.numpy as jnp
 
-# Define the function to optimize
-def func(x):
-    return jnp.sum(jnp.square(x))
-
-# Initialize the optimizer
-opt_init, opt_update = jax.experimental.optimizers.adam(0.01)
-
-# Initialize the state
-state = opt_init(jnp.array([1.0]))
-
-# Run the optimizer for 100 iterations
-for i in range(100):
-    grads = jax.grad(func)(state)
-    state = opt_update(i, grads, state)
+def cp_decomposition(matrix):
+    #... (rest of the function remains the same)
 
 ```python
 {}

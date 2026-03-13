@@ -13,16 +13,15 @@
 #   - Rectangular: N×M × M×P (e.g., 2×3 × 3×2, more general)
 #
 # EVOLUTION SUGGESTIONS FOR THE CONFIG:
-#   - Try lower ranks to beat known benchmarks. DO NOT TOUCH THE DIMENSIONS (N,M,P), ONLY R!.
-#   - Modify loss function to bias toward integer factors
+#   - Modify the optimization config should you see fit (e.g., learning rate, batch size, iterations).
 # =============================================================================
 
 PROBLEM_CONFIG = {
     'N': 2,    # Rows of first matrix (A is N×M)
     'M': 2,    # Columns of A / Rows of B (shared dimension)
     'P': 2,    # Columns of second matrix (B is M×P, result is N×P)
-    # DO NOT TOUCH ABOVE DIMENSIONS.
-    'R': 7,    # Target rank (scalar multiplications) 
+    # NEVER EVER CHANGE THE ABOVE DIMENSIONS.
+    'R': 7,    # Target rank (scalar multiplications). This is the target for optimization, but we can try lower or higher values. Changing this is NOT done in this code block, keep as is.
 }
 
 # Feel free to modify.
@@ -182,7 +181,10 @@ def get_args():
 
 def create_loss_function(target_tensor):
     """
-    Create the loss function for optimization.
+    Create the loss function for optimization. IT IS CRUCIAL THAT THIS FUNCTION 
+    RETURNS A FUNCTION WITH THE SIGNATURE loss_fn(params) or loss_fn(params, disc_weight)
+    depending on your implementation choice, as this is what the optimization loop 
+    expects when it calls jax.value_and_grad(loss_fn)(params).
     
     LLM EVOLUTION GUIDE:
     You can modify this function to improve convergence and solution quality.
@@ -223,6 +225,10 @@ def create_loss_function(target_tensor):
     # Your end goal is to provide a loss function that optimizes for solution factors as close as possible to a clean integer factorization (with factors ideally in -1,0,1) that reconstructs the tensor exactly.
     # Remember that T_hat in the existing loss function below is the reconstructed tensor from the given factors U, V, and W. 
     # The loss is currently just the L2 norm of the difference between the target tensor and the reconstructed tensor, which encourages exact reconstruction but does not directly encourage integer or sparse factors.
+    
+    # this INTERNAL loss function is called in the step function during optimization, in a line that'll look like this:
+    #   loss, grads = jax.value_and_grad(loss_fn)(params)
+    # Ensure that whatever improved version of loss_fn you create is compatible with a call with this usage.
 
     # LOSS FUNCTION WITHOUT DISCRETIZATION
     def loss_fn(params):
@@ -413,7 +419,7 @@ def main():
 
     # Creates loss function 
     loss_fn = create_loss_function(target_tensor = target_tensor) # helper function call! be wary of modifying arguments here, unless you understand the function's behavior!
-    # create_loss_function returns: return jnp.sum((target_tensor - T_hat) ** 2)
+    # create_loss_function returns: jnp.sum((target_tensor - T_hat) ** 2)
 
     # Create optimizer
     optimizer = create_optimizer(learning_rate = args.lr) # helper function call! be wary of modifying, unless you understand the below:

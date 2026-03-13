@@ -1,6 +1,29 @@
-to use `numpy` instead of `jax.numpy`? You can assume that the rest of the code in the `cp_decomposition` function does not need to be modified. 
+python
+import jax.numpy as jnp
 
-Here is the corrected version of the code:
+def loss_fn(params):
+    # params is a list of length 3 containing three tensors of shape (r, m), (r, n), (r, p)
+    # where r is the rank of the decomposition
+    A, B, C = params
+    reconstructed_tensor = jnp.einsum('ijk,ar,br,cr->abc', 
+                                      matrix_multiplication_tensor, 
+                                      A, B, C)
+    return jnp.sum((reconstructed_tensor - target_tensor) ** 2)
+
+# Define the initial parameters
+params_init = [jnp.random.normal(0, 1, size=(10, 128)), 
+               jnp.random.normal(0, 1, size=(10, 128)), 
+               jnp.random.normal(0, 1, size=(10, 128))]
+
+# Initialize the optimizer
+opt_state = opt.init(params_init)
+
+# Optimize the parameters
+for i in range(num_iterations):
+    grads = jax.grad(loss_fn)(params_init)
+    updates = opt.update(grads, opt_state)
+    opt_state = updates[1]
+    params = updates[0]
 
 ```python
 {}

@@ -1,13 +1,33 @@
 python
-def optimize_cp_decomposition(optimizer, X):
-    #... (rest of the function remains the same)
-    for i in range(num_iterations):
-        #... (rest of the loop remains the same)
-        if np.linalg.norm(grad) > 0.01:
-            learning_rate = 0.001
-        else:
-            learning_rate = 0.0001
-        #... (rest of the loop remains the same)
+import jax.numpy as jnp
+
+def cp_decomposition(matrix):
+    # Initialize random weights and factors for each mode
+    weights = jnp.array([0.5, 0.3, 0.2])
+    factors = [
+        jnp.array([[0.1, 0.2], [0.3, 0.4]]),
+        jnp.array([[0.5, 0.6], [0.7, 0.8]]),
+        jnp.array([[0.9, 1.0], [1.1, 1.2]])
+    ]
+
+    # Perform CP decomposition using ALS algorithm
+    for _ in range(10):  # number of iterations
+        for i in range(len(factors)):
+            # Compute Khatri-Rao product of all factors except the current one
+            kr_product = jnp.ones((matrix.shape[0], 1))
+            for j in range(len(factors)):
+                if j!= i:
+                    kr_product = jnp.kron(kr_product, factors[j])
+
+            # Update the current factor using least squares
+            factors[i] = jnp.linalg.lstsq(kr_product, matrix, rcond=None)[0]
+
+    return weights, factors
+
+# Example usage
+matrix = jnp.array([[1, 2], [3, 4]])
+weights, factors = cp_decomposition(matrix)
+print(weights, factors)
 
 ```python
 {}

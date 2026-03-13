@@ -1,0 +1,14 @@
+python
+def optimize_cp_decomposition(optimizer, X):
+    #... (rest of the function remains the same)
+    for i in range(num_iterations):
+        #... (rest of the loop remains the same)
+        if np.linalg.norm(grad) > 0.01:
+            learning_rate = 0.001
+        else:
+            learning_rate = 0.0001
+        #... (rest of the loop remains the same)
+
+```python
+{}
+```
