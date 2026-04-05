@@ -1,29 +1,28 @@
 python
 import jax.numpy as jnp
 
-def loss_fn(params):
-    # params is a list of length 3 containing three tensors of shape (r, m), (r, n), (r, p)
-    # where r is the rank of the decomposition
-    A, B, C = params
-    reconstructed_tensor = jnp.einsum('ijk,ar,br,cr->abc', 
-                                      matrix_multiplication_tensor, 
-                                      A, B, C)
-    return jnp.sum((reconstructed_tensor - target_tensor) ** 2)
+def cp_decomposition(matrix):
+    # Define the number of iterations and learning rate
+    num_iterations = 1000
+    learning_rate = 0.01
+    
+    # Initialize the weights randomly
+    weights = jnp.random.uniform(0, 1, size=(matrix.shape[0],))
+    
+    # Perform gradient descent to optimize the weights
+    for _ in range(num_iterations):
+        # Compute the gradient of the loss function
+        gradient = -2 * jnp.dot(matrix.T, (jnp.outer(weights, weights) - matrix))
+        
+        # Update the weights using gradient descent
+        weights -= learning_rate * gradient
+        
+    return weights
 
-# Define the initial parameters
-params_init = [jnp.random.normal(0, 1, size=(10, 128)), 
-               jnp.random.normal(0, 1, size=(10, 128)), 
-               jnp.random.normal(0, 1, size=(10, 128))]
-
-# Initialize the optimizer
-opt_state = opt.init(params_init)
-
-# Optimize the parameters
-for i in range(num_iterations):
-    grads = jax.grad(loss_fn)(params_init)
-    updates = opt.update(grads, opt_state)
-    opt_state = updates[1]
-    params = updates[0]
+# Example usage:
+matrix = jnp.array([[1, 2], [3, 4]])
+result = cp_decomposition(matrix)
+print(result)
 
 ```python
 {}

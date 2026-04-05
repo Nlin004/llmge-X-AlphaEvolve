@@ -23,7 +23,7 @@ mixt.sh
 
 llm-gpu
 ------
-A100-40GB|A100-80GB|H100|H200|V100-16GB|V100-32GB|RTX6000|A40|L40S
+nvidia-gpu
 ------
 
 
@@ -60,7 +60,7 @@ server-sh
 #SBATCH -t 8:00:00
 #SBATCH --nodes=1
 #SBATCH -G 2
-#SBATCH -C "A100-80GB|H100|H200"
+#SBATCH -C "H100|H200"
 #SBATCH --mem 160G
 #SBATCH -c 16
 ------

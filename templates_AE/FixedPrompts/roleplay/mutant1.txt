@@ -1,6 +1,8 @@
-to use `jax.jit` for just-in-time compilation and `jax.value_and_grad` to compute both the value and gradient of the loss function? 
+python
+import jax.numpy as jnp
 
-Here's how I would do it: 
+def cp_decomposition(matrix):
+    #... (rest of the function remains the same)
 
 ```python
 {}

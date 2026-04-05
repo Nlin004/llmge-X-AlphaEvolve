@@ -1,8 +1,6 @@
-python
-import jax.numpy as jnp
+to use `numpy` instead of `jax.numpy`? You can assume that the rest of the code in the `cp_decomposition` function does not need to be modified. 
 
-def cp_decomposition(matrix):
-    #... (rest of the function remains the same)
+Here is the corrected version of the code:
 
 ```python
 {}

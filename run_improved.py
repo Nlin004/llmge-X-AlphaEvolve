@@ -100,19 +100,19 @@ def generate_template(PROB_EOT, GEN_COUNT, TOP_N_GENES, SOTA_ROOT, SEED_NETWORK,
         for x, y, augment_idx in parts:
             if x.strip() != y.strip():
                 break
-        eot_template_path = os.path.join(ROOT_DIR, 'templates/EoT/EoT.txt')
+        eot_template_path = os.path.join(ROOT_DIR, 'templates_AE/EoT/EoT.txt')
         with open(eot_template_path, 'r') as file:
             eot_template_txt = file.read()
         template_txt = eot_template_txt.format(x, y, "{}")
         mute_type = "EoT"
     else:
         print("\t‣ FixedPrompts")
-        prompt_templates = glob.glob(f'{ROOT_DIR}/templates/FixedPrompts/*/*.txt')
+        prompt_templates = glob.glob(f'{ROOT_DIR}/templates_AE/FixedPrompts/*/*.txt')
         template_path = np.random.choice(prompt_templates)
         mute_type = os.path.basename(template_path).split('.')[0]  # Assuming the file extension needs to be removed
         with open(template_path, 'r') as file:
             template_txt = file.read()
-        with open(f'{ROOT_DIR}/templates/ConstantRules.txt', 'r') as file:
+        with open(f'{ROOT_DIR}/templates_AE/ConstantRules.txt', 'r') as file:
             rules_txt = file.read()
         template_txt = f'{template_txt}\n{rules_txt}'
     return template_txt, mute_type
@@ -792,7 +792,7 @@ def load_checkpoint(folder_name="checkpoints", checkpoint_file=None):
         return None, None
     if checkpoint_file is None:
         checkpoint_files = sorted(glob.glob(os.path.join(folder_name, 'checkpoint_gen_*.pkl')), key=extract_generation, reverse=True)
-        if checkpoint_files is not None:
+        if len(checkpoint_files) > 0:
             checkpoint_file = os.path.split(checkpoint_files[0])[1]
         else:
             checkpoint_file = None

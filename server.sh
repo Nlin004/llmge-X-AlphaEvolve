@@ -3,7 +3,7 @@
 #SBATCH -t 8:00:00
 #SBATCH --nodes=1
 #SBATCH -G 2
-#SBATCH -C "A100-80GB|H100|H200"
+#SBATCH -C "H100|H200"
 #SBATCH --mem 160G
 #SBATCH -c 16
 echo "launching LLM Server"

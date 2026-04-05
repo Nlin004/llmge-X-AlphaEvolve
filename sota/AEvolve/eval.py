@@ -16,6 +16,7 @@ import argparse
 import importlib
 import os
 import sys
+import time
 import numpy as np
 import random
 from pathlib import Path as p
@@ -206,25 +207,63 @@ def random_matrix_verification_vs_ref(U, V, W, U_ref, V_ref, W_ref,
             counter += 1
     return counter / num_tests
 
-def random_matrix_verification(U, V, W, n, m, p, num_tests=50, seed=0):
+# def random_matrix_verification(U, V, W, n, m, p, num_tests=50, seed=0):
+#     rng = np.random.default_rng(seed)
+#     print("**** RANDOM MATRIX TESTS ****")
+#     counter = 0
+#     for _ in range(num_tests):
+#         A = rng.integers(-3, 4, size=(n, m), dtype=np.int64)
+#         B = rng.integers(-3, 4, size=(m, p), dtype=np.int64)
+
+#         C_expected = A @ B
+#         C_actual = apply_decomposition_bilinear(A, B, U, V, W)
+
+#         # print("C_expected:\n", C_expected)
+#         # print("C_actual:\n", C_actual)
+#         # print("-"*20)
+
+#         if np.array_equal(C_actual, C_expected):
+#             counter += 1
+#     print(f"Random matrix verification score: {counter}/{num_tests} tests correct.")
+#     return counter/num_tests # float
+
+# random matrix verification with timing and median for comparisons to other correct algos.
+def random_matrix_verification(U, V, W, n, m, p, num_tests=50, seed=0, repeats=200):
     rng = np.random.default_rng(seed)
     print("**** RANDOM MATRIX TESTS ****")
     counter = 0
+    times = []
+
     for _ in range(num_tests):
         A = rng.integers(-3, 4, size=(n, m), dtype=np.int64)
         B = rng.integers(-3, 4, size=(m, p), dtype=np.int64)
-
         C_expected = A @ B
-        C_actual = apply_decomposition_bilinear(A, B, U, V, W)
 
-        # print("C_expected:\n", C_expected)
-        # print("C_actual:\n", C_actual)
-        # print("-"*20)
+        # Repeat each multiplication to average out Python/OS noise
+        t0 = time.perf_counter_ns()
+        for _ in range(repeats):
+            C_actual = apply_decomposition_bilinear(A, B, U, V, W)
+        elapsed_ns = (time.perf_counter_ns() - t0) / repeats
+
+        times.append(elapsed_ns)
 
         if np.array_equal(C_actual, C_expected):
             counter += 1
+
+    median_ns = int(np.median(times))
     print(f"Random matrix verification score: {counter}/{num_tests} tests correct.")
-    return counter/num_tests # float
+    print(f"Median wall-clock time per multiply: {median_ns} ns")
+    return counter / num_tests, median_ns
+
+
+# metric: count the number of total additions.
+def count_operations(U, V, W):
+    rank = U.shape[1]
+    adds = sum(np.count_nonzero(U[:, k]) - 1 for k in range(rank))
+    adds += sum(np.count_nonzero(V[:, k]) - 1 for k in range(rank))
+    adds += sum(np.count_nonzero(W[:, k]) - 1 for k in range(rank))
+    return adds
+
 
 
 # ============ MAIN VERIFICATION PIPELINE =============
@@ -246,8 +285,6 @@ def verify_decomposition_pipeline(U_float, V_float, W_float, n, m, p, num_random
     # T_ref = compute_reference_tensor(U_float, V_float, W_float)
 
 
-
-
     # Step 1: actual tensor correctness
     ratio_matrix_entries_wrong, magnitude_of_errors = exact_tensor_check(U_half, V_half, W_half, n, m, p)
     print(f"Exact tensor correctness check: {100*(1-ratio_matrix_entries_wrong):.2f}% entries correct, RMSE: {magnitude_of_errors:.2e}\n\n")
@@ -266,13 +303,18 @@ def verify_decomposition_pipeline(U_float, V_float, W_float, n, m, p, num_random
     basis_score = basis_verification_cleaned(U_half, V_half, W_half, n, m, p)
     # basis_score = basis_verification_vs_ref(U_half, V_half, W_half, U_ref, V_ref, W_ref, n) # using T_ref instead of canonical A@B as the basis for correctness, since the model is really trying to match T_ref not necessarily the canonical tensor.
 
+    # Step 3: random tests w/ runtime measurement
+    # random_score = random_matrix_verification(U_half, V_half, W_half, n, m, p, num_random_tests)
+    random_score, median_ns = random_matrix_verification(U_half, V_half, W_half, n, m, p, num_random_tests)
 
-    # Step 3: random tests
-    random_score = random_matrix_verification(U_half, V_half, W_half, n, m, p, num_random_tests)
     # random_score = random_matrix_verification_vs_ref(U_half, V_half, W_half, U_ref, V_ref, W_ref, n, num_random_tests) # using T_ref instead of canonical A@B as the basis for correctness, since the model is really trying to match T_ref not necessarily the canonical tensor.
+    
+    # Step 4: analytical operation count (ADDITIONS!)
+    additions = count_operations(U_half, V_half, W_half) # minimize
 
-    # Done: return all metrics gathered from the suites of tests as a 4-tuple for LLMGE 
-    fitness = (ratio_matrix_entries_wrong, magnitude_of_errors, basis_score, random_score)
+
+    # Done: return all metrics gathered from the suites of tests as a 6-tuple for LLMGE 
+    fitness = (ratio_matrix_entries_wrong, magnitude_of_errors, basis_score, random_score, median_ns, additions)
     return fitness
 
 
@@ -513,7 +555,7 @@ if __name__ == '__main__':
     print("\n************************************ FULL EVAL PIPELINE END ************************************\n\n")
     
     fitness = pipeline_scores
-    fitness_0, fitness_1, fitness_2, fitness_3 = fitness
+    fitness_0, fitness_1, fitness_2, fitness_3, fitness_4, fitness_5 = fitness
 
     # ========================================================================
     # CALCULATE FITNESS
@@ -523,7 +565,9 @@ if __name__ == '__main__':
     print(f"Magnitude of errors (lower is better): {fitness_1:.4f}")
     print(f"Basis score ratio (higher is better): {fitness_2:.4f}")
     print(f"Random multiplication score (higher is better): {fitness_3:.4f}")
-    results_text = f"{fitness_0:.4f}, {fitness_1:.4f}, {fitness_2:.4f}, {fitness_3:.4f}"
+    print(f"Median wall-clock time per multiply (lower is better): {fitness_4} ns")
+    print(f"Total additions (lower is better): {fitness_5}")
+    results_text = f"{fitness_0:.4f}, {fitness_1:.4f}, {fitness_2:.4f}, {fitness_3:.4f}, {fitness_4:.4f}, {fitness_5:.4f}"
     print("="*120)
 
     filename = os.path.abspath(f'results/{gene_id}_results.txt')
