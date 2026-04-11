@@ -2,26 +2,27 @@ python
 import jax.numpy as jnp
 
 def cp_decomposition(matrix):
-    # Initialize random weights for each rank-1 term
-    num_terms = 10
-    weights = jnp.array([jnp.random.rand() for _ in range(num_terms)])
+    # Initialize random weights and factors for each mode
+    weights = jnp.array([0.5, 0.3, 0.2])
+    factors = [jnp.random.rand(10, 1) for _ in range(3)]
 
-    # Define the loss function
-    def loss(weights, matrix):
-        reconstructed_matrix = jnp.sum(
-            [w * jnp.outer(jnp.ones((matrix.shape[0], 1)), jnp.ones((matrix.shape[1], 1))) 
-             for w in weights],
-            axis=0)
-        return jnp.mean((reconstructed_matrix - matrix) ** 2)
+    # Perform iterative updates using ALS (Alternating Least Squares)
+    for _ in range(100):
+        for i in range(3):
+            # Compute Khatri-Rao product of all other modes
+            kr_product = jnp.kron(jnp.kron(factors[0], factors[1]), factors[2]) if i == 0 else \
+                         jnp.kron(jnp.kron(factors[0], factors[2]), factors[1]) if i == 1 else \
+                         jnp.kron(jnp.kron(factors[1], factors[2]), factors[0])
 
-    # Perform gradient descent optimization
-    learning_rate = 0.01
-    iterations = 1000
-    for i in range(iterations):
-        gradients = jax.grad(loss, argnums=0)(weights, matrix)
-        weights -= learning_rate * gradients
+            # Update factor for current mode
+            factors[i] = jnp.dot(matrix, kr_product)
 
-    return weights
+    return weights, factors
+
+# Example usage
+matrix = jnp.random.rand(10, 10, 10)
+weights, factors = cp_decomposition(matrix)
+print(weights, factors)
 
 ```python
 {}

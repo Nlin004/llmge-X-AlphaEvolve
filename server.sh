@@ -12,10 +12,12 @@ hostname
 
 module load cuda
 module load uv
-
+echo "Visible devices before export: $CUDA_VISIBLE_DEVICES"
+nvidia-smi
 # Make sure CUDA can see all GPUs
 export CUDA_VISIBLE_DEVICES=0,1
-
+echo "Visible devices after export: $CUDA_VISIBLE_DEVICES"
+nvidia-smi
 export SERVER_HOSTNAME=$(hostname)
 
 HOSTNAME_FILE=$(pwd)"/hostname.log"

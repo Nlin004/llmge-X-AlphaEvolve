@@ -373,8 +373,7 @@ def create_optimizer(learning_rate):
 # =============================================================================
 # MAIN EXECUTION (PRESERVE ORIGINAL LEVEL OF INDENTATION, relative to if __name__ == "__main__":)
 # =============================================================================
-if __name__ == "__main__":
-    main()
+
 
 # PRESERVE ANY ORIGINAL LEVELS OF INDENTATION BELOW!
 def main():
@@ -603,3 +602,9 @@ def main():
     print(f"+=================================[END OF {thisFileName[:-3].upper()} OUTPUT]=================================+\n")
 # PRESERVE THE CODE ABOVE'S ORIGINAL LEVEL OF INDENTATION WHEN YOU MODIFY IT! NOTICE THIS IS ONE TAB IN FROM THE "if __name__ == '__main__':" GUARD. 
 # DO NOT ADD ANOTHER LAYER OF INDENTATION UNLESS YOU ARE ADDING A NEW FUNCTION OR CLASS DEFINITION, ETC. THAT REQUIRES IT.
+
+
+
+
+if __name__ == "__main__":
+    main()
