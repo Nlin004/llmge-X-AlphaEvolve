@@ -23,6 +23,24 @@ from pathlib import Path as p
 from os.path import join as pj
 
 
+# =============================================================================
+# DYNAMIC RANK SEARCH CONFIGURATION
+# Edit this list to control which matrix sizes and rank ranges are searched.
+# For each size, the evaluator descends from starting_R until no valid solution
+# is found. trivial_rank = N*M*P is computed inline (not stored here).
+# =============================================================================
+MATRIX_SEARCH_CONFIGS = [
+    {'N': 2, 'M': 2, 'P': 2, 'starting_R': 7, 'min_R': 4},
+    # Add more sizes here, e.g.:
+    # {'N': 2, 'M': 3, 'P': 2, 'starting_R': 11, 'min_R': 8},
+    # {'N': 3, 'M': 2, 'P': 3, 'starting_R': 15, 'min_R': 11},
+]
+# Iterations and early-stop threshold passed to each model run during rank search.
+RANK_SEARCH_ITERATIONS = 3000
+RANK_SEARCH_EARLY_STOP = 1e-5
+# =============================================================================
+
+
 def create_save_dir(save_root):
     """Create incrementing exp directory."""
     if not p(save_root).exists():
@@ -403,203 +421,181 @@ if __name__ == '__main__':
     save_dir = f'{args.save_dir}/{gene_id}'
     create_save_dir(save_dir)
     
-    # run_dir = p(args.save_dir) / f"{gene_id}_pid{os.getpid()}"
-    run_dir = p(args.save_dir).resolve() / f"{gene_id}_pid{os.getpid()}"
-    run_dir.mkdir(parents=True, exist_ok=True)
+    # run_dir is now created per (size, rank) attempt inside the search loop below.
 
 
 
 
 
     print("="*120)
-    # print(f"EVALUATING: {args.N}×{args.N} matrix multiplication")
-    # print(f"Target rank: {args.R}")
     print(f"Gene ID: {gene_id}")
+    print(f"Matrix sizes to search: {[(c['N'], c['M'], c['P']) for c in MATRIX_SEARCH_CONFIGS]}")
     print("="*120)
-    
+
     # ========================================================================
-    # RUN THE MODEL
+    # DYNAMIC RANK SEARCH — iterate over sizes, descend rank until failure
     # ========================================================================
-    
-    # The model should have a main() function or similar that returns factors
-    # We'll call it and capture the results
-    print("\nRunning model for eval...")
-    
-    # Temporarily redirect to capture model output if needed
-    import io
-    import contextlib
-    
-    # Save original stdout
-    original_stdout = sys.stdout
-    
-    # Run the model's main function
-    # The seed model has a main() function that we can call
+    all_size_results = []
 
-    current_dir = os.getcwd()
-    print(f"Current directory before calling model.main(): {current_dir}")
-    try:
-        # Call the model's main function
-        # It will create its own experiment directory and save results
-        old_argv = sys.argv
+    for size_cfg in MATRIX_SEARCH_CONFIGS:
+        N, M, P = size_cfg['N'], size_cfg['M'], size_cfg['P']
+        trivial_rank = N * M * P
+        best_valid_R = None
+        best_valid_fitness_tuple = None
 
-        sys.argv = [
-            old_argv[0],
-            "--save_dir", str(run_dir),
-        ]
-        # Make sure we're in the right directory
-        os.chdir(script_directory)
-        model_module.main()
+        print(f"\n{'='*80}")
+        print(f"  Searching {N}x{M} × {M}x{P}  |  trivial_rank={trivial_rank}  |  "
+              f"R range: {size_cfg['starting_R']} -> {size_cfg['min_R']}")
+        print(f"{'='*80}")
 
-        # Find factors file, load it.
-        factors_file = run_dir / "factors.npz"
-        if not factors_file.exists():
-            raise FileNotFoundError(f"No factors found in {run_dir}")
-        
-        factors_data = np.load(factors_file)
-        print(f"\nLoaded factors from {factors_file}")
+        for R in range(size_cfg['starting_R'], size_cfg['min_R'] - 1, -1):
+            run_dir = (p(args.save_dir).resolve() /
+                       f"{gene_id}_N{N}M{M}P{P}_R{R}_pid{os.getpid()}")
+            run_dir.mkdir(parents=True, exist_ok=True)
 
-    except Exception as e: # if can't find factors for some reason, or some other error.
-        print(f"\nERROR loading factors: {e}")
-        print(f"Looked for factors at: {factors_file}")
-        print(f"run_dir contents:")
-        if run_dir.exists():
-            print(list(run_dir.iterdir()))
+            print(f"\n  [R={R}] Running model for {N}x{M}x{P}...")
+            old_argv = sys.argv
+            try:
+                sys.argv = [
+                    old_argv[0],
+                    "--save_dir", str(run_dir),
+                    "--N", str(N),
+                    "--M", str(M),
+                    "--P", str(P),
+                    "--R", str(R),
+                    "--iterations", str(RANK_SEARCH_ITERATIONS),
+                    "--early_stop_threshold", str(RANK_SEARCH_EARLY_STOP),
+                ]
+                os.chdir(script_directory)
+                model_module.main()
+                sys.argv = old_argv
+
+                factors_file = run_dir / "factors.npz"
+                if not factors_file.exists():
+                    print(f"  [R={R}] No factors.npz found — stopping rank descent.")
+                    break
+
+                factors_data = np.load(factors_file)
+
+                # Guard: model must respect the CLI dimensions
+                fd_N = int(factors_data['N'])
+                fd_M = int(factors_data['M'])
+                fd_P = int(factors_data['P'])
+                if fd_N != N or fd_M != M or fd_P != P:
+                    print(f"  [R={R}] Dimension mismatch: expected {N}x{M}x{P}, "
+                          f"got {fd_N}x{fd_M}x{fd_P}. Model ignores CLI dims — stopping.")
+                    break
+
+                U, V, W = factors_data['U'], factors_data['V'], factors_data['W']
+
+                print(f"\n  [R={R}] **** EVAL PIPELINE START ****")
+                print(f"  Rank being evaluated: {R}  "
+                      f"({R} scalar multiplications for {N}x{M} x {M}x{P})")
+                fitness_tuple = verify_decomposition_pipeline(
+                    U, V, W, n=N, m=M, p=P, num_random_tests=10)
+                print(f"  [R={R}] **** EVAL PIPELINE END ****\n")
+
+                _, _, basis_score, random_score, _, _ = fitness_tuple
+                is_valid = (basis_score == 1.0 and random_score == 1.0)
+
+                if is_valid:
+                    print(f"  [R={R}] VALID (basis={basis_score:.4f}, "
+                          f"random={random_score:.4f}) — trying R={R-1}")
+                    best_valid_R = R
+                    best_valid_fitness_tuple = fitness_tuple
+                else:
+                    print(f"  [R={R}] INVALID (basis={basis_score:.4f}, "
+                          f"random={random_score:.4f}) — stopping rank descent.")
+                    break
+
+            except Exception as e:
+                sys.argv = old_argv
+                print(f"  [R={R}] Exception: {e} — stopping rank descent.")
+                break
+
+        # Aggregate per-size result
+        if best_valid_R is not None:
+            ratio_wrong, magnitude_errors, basis_score, random_score, median_ns, additions = best_valid_fitness_tuple
+            rank_ratio = best_valid_R / trivial_rank
+            magnitude_errors = magnitude_errors if np.isfinite(magnitude_errors) else 1000.0
+            median_ns = min(float(median_ns), 1e9)
+            additions = min(float(additions), 1e6)
+            print(f"\n  Best valid rank for {N}x{M}x{P}: R={best_valid_R} "
+                  f"(rank_ratio={rank_ratio:.4f})")
         else:
-            print(f"  run_dir does not exist: {run_dir}")
-        
-        # Also check if model saved to default location
-        print(f"\nChecking default 'trained' directory:")
-        trained_dir = p("trained")
-        if trained_dir.exists():
-            exp_dirs = sorted([d for d in trained_dir.iterdir() if d.is_dir()])
-            print(f"  Found directories: {exp_dirs}")
-            if exp_dirs:
-                latest = exp_dirs[-1]
-                print(f"  Latest: {latest}")
-                if (latest / "factors.npz").exists():
-                    print(f"  [GOOD] factors.npz exists in {latest}")
-        
-    # ========================================================================
-    # VERIFY CORRECTNESS
-    # ========================================================================
-    factor_matrix_1 = factors_data['U']
-    factor_matrix_2 = factors_data['V']
-    factor_matrix_3 = factors_data['W']
-    # thisN = int(factors_data['N'])
-    # thisTargetRank = int(factors_data["R"])
-    thisN = int(factors_data['N'])
-    thisM = int(factors_data['M'])
-    thisP = int(factors_data['P'])
-    thisR = int(factors_data['R'])
+            rank_ratio = 1.0
+            ratio_wrong = 1.0
+            magnitude_errors = 1000.0
+            basis_score = 0.0
+            random_score = 0.0
+            median_ns = 1e9
+            additions = 1e6
+            print(f"\n  No valid solution found for {N}x{M}x{P} (sentinel values used).")
 
-    USE_ROUNDED = False
-    def round_half(x):
-        return np.round(x * 2) / 2
-    
-    if USE_ROUNDED:
-        factor_matrix_1 = round_half(factor_matrix_1)
-        factor_matrix_2 = round_half(factor_matrix_2)
-        factor_matrix_3 = round_half(factor_matrix_3)
-
-
-    ## TESTING STRASSEN (CORRECTED MATRIX3 c11[3] = 1 instead of 0):
-    # factor_matrix_1 = np.array([
-    #     [ 1,  0,  1,  0,  1, -1,  0],  # a11
-    #     [ 0,  0,  0,  0,  1,  0,  1],  # a12
-    #     [ 0,  1,  0,  0,  0,  1,  0],  # a21
-    #     [ 1,  1,  0,  1,  0,  0, -1],  # a22
-    # ], dtype=float)
-
-    # factor_matrix_2 = np.array([
-    #     [ 1,  1,  0, -1,  0,  1,  0],  # b11
-    #     [ 0,  0,  1,  0,  0,  1,  0],  # b12
-    #     [ 0,  0,  0,  1,  0,  0,  1],  # b21
-    #     [ 1,  0, -1,  0,  1,  0,  1],  # b22
-    # ], dtype=float)
-
-    # factor_matrix_3 = np.array([
-    #     [ 1,  0,  0,  1, -1,  0,  1],  # c11  ### fourth entry is 1 instead of 0. 
-    #     [ 0,  0,  1,  0,  1,  0,  0],  # c12 
-    #     [ 0,  1,  0,  1,  0,  0,  0],  # c21 
-    #     [ 1, -1,  1,  0,  0,  1,  0],  # c22
-    # ], dtype=float)
-
-    print(f"\n{'='*60}")
-    print(f"  RANK SUMMARY")
-    print(f"  Problem : {thisN}x{thisM} × {thisM}x{thisP}")
-    print(f"  Rank R  : {thisR}  (= {thisR} scalar multiplications)")
-    print(f"  Gene    : {gene_id}")
-    print(f"{'='*60}\n")
-    
-    print(f"Factor shapes: {factor_matrix_1.shape}, {factor_matrix_2.shape}, {factor_matrix_3.shape}")
-    print("Factor matrix 1 (U):\n", factor_matrix_1)
-    print("Factor matrix 2 (V):\n", factor_matrix_2)
-    print("Factor matrix 3 (W):\n", factor_matrix_3)
-
-    U_ref = factor_matrix_1
-    V_ref = factor_matrix_2
-    W_ref = factor_matrix_3
-
-    # w_c11 = solve_W_row_for_entry(U_ref, V_ref, 0)
-    # w_c12 = solve_W_row_for_entry(U_ref, V_ref, 1)
-    # w_c21 = solve_W_row_for_entry(U_ref, V_ref, 2)
-    # w_c22 = solve_W_row_for_entry(U_ref, V_ref, 3)
-    # W_fixed = np.vstack([w_c11, w_c12, w_c21, w_c22])
-    # W_fixed_rounded = np.rint(W_fixed).astype(int)
-    # print("W from solving linear system:")
-    # print(W_fixed_rounded)
-    # print("The W i have already:")
-    # print(W_ref)
-    # print("EQUALITY? ", np.array_equal(W_fixed_rounded, W_ref))
-    # # testing a manual W passed in
-    # W_ref = W_fixed_rounded
-
-
-
-    print(f"\n\n************************************ FULL EVAL PIPELINE START (R={thisR}) ************************************\n")
-    print(f"    Rank being evaluated: {thisR}")
-    print(f"    This means the algorithm performs exactly {thisR} scalar multiplications to multiply a {thisN}x{thisM} by {thisM}x{thisP} matrix.\n")
-    # pipeline_scores = verify_decomposition_pipeline(U_ref, V_ref, W_ref, n=thisN, m=thisM, p=thisP, num_random_tests=10)
-    pipeline_scores = verify_decomposition_pipeline(U_ref, V_ref, W_ref, n=thisN, m=thisM, p=thisP, num_random_tests=10)
-    print("\n************************************ FULL EVAL PIPELINE END ************************************\n\n")
-    
-    fitness = pipeline_scores
-    fitness_0, fitness_1, fitness_2, fitness_3, fitness_4, fitness_5 = fitness
+        all_size_results.append({
+            'N': N, 'M': M, 'P': P,
+            'best_valid_R': best_valid_R,
+            'rank_ratio': rank_ratio,
+            'ratio_wrong': ratio_wrong,
+            'magnitude_errors': magnitude_errors,
+            'basis_score': basis_score,
+            'random_score': random_score,
+            'median_ns': median_ns,
+            'additions': additions,
+        })
 
     # ========================================================================
-    # CALCULATE FITNESS
+    # AGGREGATE FITNESS ACROSS ALL SIZES
+    # Fitness tuple (6 values, matching FITNESS_WEIGHTS = (-1,-1,+1,+1,-1,-1)):
+    #   [0] avg_rank_ratio  — mean(best_valid_R / N*M*P) across sizes (MINIMIZE)
+    #   [1] avg_ratio_wrong — mean fraction of tensor entries wrong (MINIMIZE)
+    #   [2] avg_basis_score — mean basis test pass rate (MAXIMIZE)
+    #   [3] avg_random_score— mean random test pass rate (MAXIMIZE)
+    #   [4] avg_median_ns   — mean wall-clock time per multiply in ns (MINIMIZE)
+    #   [5] avg_additions   — mean total addition operations (MINIMIZE)
     # ========================================================================
-    print("==================================== [ FITNESS ] ====================================")
-    print(f"Rank R (scalar multiplications used)  : {thisR}")
-    print(f"Fraction of literal matrix entries WRONG (0 is identical match): {fitness_0:.4f}")
-    print(f"Magnitude of errors (lower is better): {fitness_1:.4f}")
-    print(f"Basis score ratio (higher is better): {fitness_2:.4f}")
-    print(f"Random multiplication score (higher is better): {fitness_3:.4f}")
-    print(f"Median wall-clock time per multiply (lower is better): {fitness_4} ns")
-    print(f"Total additions (lower is better): {fitness_5}")
-    #if we want to put rank into the fitness tuple for LLMGE to use in selection, we can do it like this:
-    #results_text = f"R={thisR}, {fitness_0:.4f}, {fitness_1:.4f}, {fitness_2:.4f}, {fitness_3:.4f}, {fitness_4:.4f}, {fitness_5:.4f}"
-    
-    results_text = f" {fitness_0:.4f}, {fitness_1:.4f}, {fitness_2:.4f}, {fitness_3:.4f}, {fitness_4:.4f}, {fitness_5:.4f}"
+    avg_rank_ratio  = float(np.mean([r['rank_ratio']   for r in all_size_results]))
+    avg_ratio_wrong = float(np.mean([r['ratio_wrong']  for r in all_size_results]))
+    avg_basis       = float(np.mean([r['basis_score']  for r in all_size_results]))
+    avg_random      = float(np.mean([r['random_score'] for r in all_size_results]))
+    avg_ns          = float(np.mean([r['median_ns']    for r in all_size_results]))
+    avg_additions   = float(np.mean([r['additions']    for r in all_size_results]))
+
+    print("\n==================================== [ FITNESS SUMMARY ] ====================================")
+    for r in all_size_results:
+        tag = f"N={r['N']} M={r['M']} P={r['P']}"
+        valid_str = f"R={r['best_valid_R']}" if r['best_valid_R'] is not None else "NONE"
+        print(f"  {tag}  best_R={valid_str}  rank_ratio={r['rank_ratio']:.4f}  "
+              f"basis={r['basis_score']:.4f}  random={r['random_score']:.4f}")
+    print(f"\n  avg_rank_ratio  (MINIMIZE): {avg_rank_ratio:.6f}")
+    print(f"  avg_ratio_wrong (MINIMIZE): {avg_ratio_wrong:.4f}")
+    print(f"  avg_basis_score (MAXIMIZE): {avg_basis:.4f}")
+    print(f"  avg_random_score(MAXIMIZE): {avg_random:.4f}")
+    print(f"  avg_median_ns   (MINIMIZE): {avg_ns:.4f} ns")
+    print(f"  avg_additions   (MINIMIZE): {avg_additions:.4f}")
     print("="*120)
+
+    results_text = (f" {avg_rank_ratio:.6f}, {avg_ratio_wrong:.4f}, "
+                    f"{avg_basis:.4f}, {avg_random:.4f}, "
+                    f"{avg_ns:.4f}, {avg_additions:.4f}")
 
     filename = os.path.abspath(f'results/{gene_id}_results.txt')
     dir_path = os.path.dirname(filename)
     os.makedirs(dir_path, exist_ok=True)
-    
+
     with open(filename, 'w') as file:
         file.write(results_text)
 
-    # Dedicated rank log - prepared for future dynamic rank system
+    # Rank log: one entry per searched size
     rank_log = os.path.abspath(f'results/{gene_id}_rank.txt')
     with open(rank_log, 'w') as f:
         f.write(f"gene_id: {gene_id}\n")
-        f.write(f"problem: {thisN}x{thisM} × {thisM}x{thisP}\n")
-        f.write(f"rank_used: {thisR}\n")
-        f.write(f"basis_score: {fitness_2:.4f}\n")
-        f.write(f"random_score: {fitness_3:.4f}\n")
-        f.write(f"valid: {fitness_2 == 1.0 and fitness_3 == 1.0}\n")
-    
+        for r in all_size_results:
+            f.write(f"size: {r['N']}x{r['M']}x{r['P']}  "
+                    f"best_valid_R: {r['best_valid_R']}  "
+                    f"rank_ratio: {r['rank_ratio']:.4f}  "
+                    f"valid: {r['best_valid_R'] is not None}\n")
+
     print(f"({results_text})")
     print(f"\nResults written to {filename}")
     print('='*120)

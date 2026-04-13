@@ -169,9 +169,11 @@ def get_args():
                        help="root directory for experiment folders")
     parser.add_argument("--save_dir", type=str, default=None, 
                        help="Explicit experiment directory (used by eval.py)")
-    parser.add_argument("--print_every", type=int, default=1000, 
+    parser.add_argument("--print_every", type=int, default=1000,
                        help="print best loss every K iterations")
-    
+    parser.add_argument("--early_stop_threshold", type=float, default=0.0,
+                       help="stop early if best loss falls below this value (0 = disabled)")
+
     return parser.parse_args()
 
 # --OPTION--
@@ -537,7 +539,11 @@ def main():
         batch_params, batch_opt_state, batch_losses = jax.vmap(step)(batch_params, batch_opt_state)
         best_loss = float(jnp.min(batch_losses))
         loss_history.append(best_loss)
-        
+
+        if args.early_stop_threshold > 0 and best_loss < args.early_stop_threshold:
+            print(f"\n    Early stop at step {i}: loss {best_loss:.6f} < threshold {args.early_stop_threshold}")
+            break
+
         # Update progress bar every 10 steps
         if i % 10 == 0 or i == args.iterations - 1:
             progress = (i + 1) / args.iterations

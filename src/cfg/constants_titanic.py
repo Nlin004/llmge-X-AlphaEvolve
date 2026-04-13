@@ -61,6 +61,8 @@ EVAL_RUNLINE = "uv run python {} --model {} --variant_dir {VARIANT_DIR}"
 """
 Evolution Constants/Params
 """
+# Tuple: (avg_rank_ratio, avg_ratio_wrong, avg_basis_score, avg_random_score, avg_median_ns, avg_additions)
+# avg_rank_ratio = mean(best_valid_R / N*M*P) across MATRIX_SEARCH_CONFIGS in eval.py — lower is better
 FITNESS_WEIGHTS = (-1.0, -1.0, 1.0, 1.0, -1.0, -1.0)
 INVALID_FITNESS_MAX = tuple([float(x*np.inf*-1) for x in FITNESS_WEIGHTS])
 PLACEHOLDER_FITNESS = tuple([int(x*9999999999*-1) for x in FITNESS_WEIGHTS])
