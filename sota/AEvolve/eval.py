@@ -36,8 +36,8 @@ MATRIX_SEARCH_CONFIGS = [
     # {'N': 3, 'M': 2, 'P': 3, 'starting_R': 15, 'min_R': 11},
 ]
 # Iterations and early-stop threshold passed to each model run during rank search.
-RANK_SEARCH_ITERATIONS = 7500
-RANK_SEARCH_EARLY_STOP = 1e-5
+RANK_SEARCH_ITERATIONS = 10000
+RANK_SEARCH_EARLY_STOP = 0
 # =============================================================================
 
 
@@ -448,6 +448,11 @@ if __name__ == '__main__':
               f"R range: {size_cfg['starting_R']} -> {size_cfg['min_R']}")
         print(f"{'='*80}")
 
+        # best_attempt tracks the most recent real metrics (even if invalid),
+        # so LLMGE gets gradient signal rather than pure sentinels when no
+        # valid solution is found.
+        best_attempt_fitness_tuple = None
+
         for R in range(size_cfg['starting_R'], size_cfg['min_R'] - 1, -1):
             run_dir = (p(args.save_dir).resolve() /
                        f"{gene_id}_N{N}M{M}P{P}_R{R}_pid{os.getpid()}")
@@ -495,6 +500,9 @@ if __name__ == '__main__':
                     U, V, W, n=N, m=M, p=P, num_random_tests=10)
                 print(f"  [R={R}] **** EVAL PIPELINE END ****\n")
 
+                # Always keep the most recent real metrics as fallback
+                best_attempt_fitness_tuple = fitness_tuple
+
                 _, _, basis_score, random_score, _, _ = fitness_tuple
                 is_valid = (basis_score == 1.0 and random_score == 1.0)
 
@@ -513,7 +521,11 @@ if __name__ == '__main__':
                 print(f"  [R={R}] Exception: {e} — stopping rank descent.")
                 break
 
-        # Aggregate per-size result
+        # Aggregate per-size result.
+        # If a valid solution was found, use its rank and metrics.
+        # If not, fall back to actual metrics from starting_R (so LLMGE sees
+        # real gradient signal, e.g. basis=0.75 not 0.0), but rank_ratio=1.0
+        # to penalise the lack of a verified decomposition.
         if best_valid_R is not None:
             ratio_wrong, magnitude_errors, basis_score, random_score, median_ns, additions = best_valid_fitness_tuple
             rank_ratio = best_valid_R / trivial_rank
@@ -522,7 +534,16 @@ if __name__ == '__main__':
             additions = min(float(additions), 1e6)
             print(f"\n  Best valid rank for {N}x{M}x{P}: R={best_valid_R} "
                   f"(rank_ratio={rank_ratio:.4f})")
+        elif best_attempt_fitness_tuple is not None:
+            # Real metrics from the (invalid) starting_R run — preserve gradient signal
+            ratio_wrong, magnitude_errors, basis_score, random_score, median_ns, additions = best_attempt_fitness_tuple
+            rank_ratio = 1.0  # penalise: no valid solution
+            magnitude_errors = magnitude_errors if np.isfinite(magnitude_errors) else 1000.0
+            median_ns = min(float(median_ns), 1e9)
+            additions = min(float(additions), 1e6)
+            print(f"\n  No valid solution for {N}x{M}x{P} — using real metrics from starting_R run.")
         else:
+            # Model crashed before producing any metrics
             rank_ratio = 1.0
             ratio_wrong = 1.0
             magnitude_errors = 1000.0
