@@ -142,13 +142,13 @@ def get_args():
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser()
     
-    parser.add_argument("--N", type=int, default=PROBLEM_CONFIG['N'], 
+    parser.add_argument("--N", type=int, default=2, 
                        help="rows of first matrix (A is N x M)")
-    parser.add_argument("--M", type=int, default=PROBLEM_CONFIG['M'], 
+    parser.add_argument("--M", type=int, default=2, 
                        help="cols of A / rows of B (shared dimension)")
-    parser.add_argument("--P", type=int, default=PROBLEM_CONFIG['P'], 
+    parser.add_argument("--P", type=int, default=2, 
                        help="cols of second matrix (B is M x P, result is N x P)")
-    parser.add_argument("--R", type=int, default=PROBLEM_CONFIG['R'], 
+    parser.add_argument("--R", type=int, default=7, 
                        help="target rank")
     parser.add_argument("--lr", type=float, default=OPTIMIZATION_CONFIG['lr'], 
                        help="learning rate")
