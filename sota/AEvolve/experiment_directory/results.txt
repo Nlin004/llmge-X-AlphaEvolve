@@ -1,2 +1,0 @@
-Final Loss: 1.0
-Problem: 10x20 x 20x30
