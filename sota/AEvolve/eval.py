@@ -523,6 +523,13 @@ if __name__ == '__main__':
     #     [ 0,  1,  0,  1,  0,  0,  0],  # c21 
     #     [ 1, -1,  1,  0,  0,  1,  0],  # c22
     # ], dtype=float)
+
+    print(f"\n{'='*60}")
+    print(f"  RANK SUMMARY")
+    print(f"  Problem : {thisN}x{thisM} × {thisM}x{thisP}")
+    print(f"  Rank R  : {thisR}  (= {thisR} scalar multiplications)")
+    print(f"  Gene    : {gene_id}")
+    print(f"{'='*60}\n")
     
     print(f"Factor shapes: {factor_matrix_1.shape}, {factor_matrix_2.shape}, {factor_matrix_3.shape}")
     print("Factor matrix 1 (U):\n", factor_matrix_1)
@@ -549,7 +556,9 @@ if __name__ == '__main__':
 
 
 
-    print("\n\n************************************ FULL EVAL PIPELINE START ************************************\n")
+    print(f"\n\n************************************ FULL EVAL PIPELINE START (R={thisR}) ************************************\n")
+    print(f"    Rank being evaluated: {thisR}")
+    print(f"    This means the algorithm performs exactly {thisR} scalar multiplications to multiply a {thisN}x{thisM} by {thisM}x{thisP} matrix.\n")
     # pipeline_scores = verify_decomposition_pipeline(U_ref, V_ref, W_ref, n=thisN, m=thisM, p=thisP, num_random_tests=10)
     pipeline_scores = verify_decomposition_pipeline(U_ref, V_ref, W_ref, n=thisN, m=thisM, p=thisP, num_random_tests=10)
     print("\n************************************ FULL EVAL PIPELINE END ************************************\n\n")
@@ -561,13 +570,17 @@ if __name__ == '__main__':
     # CALCULATE FITNESS
     # ========================================================================
     print("==================================== [ FITNESS ] ====================================")
+    print(f"Rank R (scalar multiplications used)  : {thisR}")
     print(f"Fraction of literal matrix entries WRONG (0 is identical match): {fitness_0:.4f}")
     print(f"Magnitude of errors (lower is better): {fitness_1:.4f}")
     print(f"Basis score ratio (higher is better): {fitness_2:.4f}")
     print(f"Random multiplication score (higher is better): {fitness_3:.4f}")
     print(f"Median wall-clock time per multiply (lower is better): {fitness_4} ns")
     print(f"Total additions (lower is better): {fitness_5}")
-    results_text = f"{fitness_0:.4f}, {fitness_1:.4f}, {fitness_2:.4f}, {fitness_3:.4f}, {fitness_4:.4f}, {fitness_5:.4f}"
+    #if we want to put rank into the fitness tuple for LLMGE to use in selection, we can do it like this:
+    #results_text = f"R={thisR}, {fitness_0:.4f}, {fitness_1:.4f}, {fitness_2:.4f}, {fitness_3:.4f}, {fitness_4:.4f}, {fitness_5:.4f}"
+    
+    results_text = f" {fitness_0:.4f}, {fitness_1:.4f}, {fitness_2:.4f}, {fitness_3:.4f}, {fitness_4:.4f}, {fitness_5:.4f}"
     print("="*120)
 
     filename = os.path.abspath(f'results/{gene_id}_results.txt')
@@ -576,6 +589,16 @@ if __name__ == '__main__':
     
     with open(filename, 'w') as file:
         file.write(results_text)
+
+    # Dedicated rank log - prepared for future dynamic rank system
+    rank_log = os.path.abspath(f'results/{gene_id}_rank.txt')
+    with open(rank_log, 'w') as f:
+        f.write(f"gene_id: {gene_id}\n")
+        f.write(f"problem: {thisN}x{thisM} × {thisM}x{thisP}\n")
+        f.write(f"rank_used: {thisR}\n")
+        f.write(f"basis_score: {fitness_2:.4f}\n")
+        f.write(f"random_score: {fitness_3:.4f}\n")
+        f.write(f"valid: {fitness_2 == 1.0 and fitness_3 == 1.0}\n")
     
     print(f"({results_text})")
     print(f"\nResults written to {filename}")
