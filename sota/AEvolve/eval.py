@@ -36,7 +36,7 @@ MATRIX_SEARCH_CONFIGS = [
     # {'N': 3, 'M': 2, 'P': 3, 'starting_R': 15, 'min_R': 11},
 ]
 # Iterations and early-stop threshold passed to each model run during rank search.
-RANK_SEARCH_ITERATIONS = 3000
+RANK_SEARCH_ITERATIONS = 7500
 RANK_SEARCH_EARLY_STOP = 1e-5
 # =============================================================================
 

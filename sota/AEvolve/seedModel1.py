@@ -3,40 +3,40 @@
 # EVOLUTIONARY SEARCH CONFIGURATION
 # =============================================================================
 # This section defines the tensor decomposition problem to solve.
-# If you are an LLM, consider evolving the parameters inside PROBLEM_CONFIG or OPTIMIZATION_CONFIG to discover better algorithms.
+# If you are an LLM, consider evolving the parameters inside OPTIMIZATION_CONFIG to discover better algorithms.
 #
 # CURRENT OBJECTIVE:
 #   Find efficient decompositions for matrix multiplication
 #
-# PROBLEM TYPES:
-#   - Square: N×N × N×N (e.g., 2×2 × 2×2, Strassen rank-7)
-#   - Rectangular: N×M × M×P (e.g., 2×3 × 3×2, more general)
+# NOTE: N, M, P, and R are overridden at runtime by eval.py via CLI arguments
+# during dynamic rank search. The values below are only used as defaults when
+# running this script standalone (outside of the LLMGE eval pipeline).
 #
-# EVOLUTION SUGGESTIONS FOR THE CONFIG:
-#   - Modify the optimization config should you see fit (e.g., learning rate, batch size, iterations).
+# EVOLUTION SUGGESTIONS:
+#   - Modify OPTIMIZATION_CONFIG (learning rate, batch size, iterations).
+#   - Do NOT rely on PROBLEM_CONFIG dimensions being fixed — they may change.
 # =============================================================================
 
 PROBLEM_CONFIG = {
-    'N': 2,    # Rows of first matrix (A is N×M)
-    'M': 2,    # Columns of A / Rows of B (shared dimension)
-    'P': 2,    # Columns of second matrix (B is M×P, result is N×P)
-    # NEVER EVER CHANGE THE ABOVE DIMENSIONS.
-    'R': 7,    # Target rank (scalar multiplications). This is the target for optimization, but we can try lower or higher values. Changing this is NOT done in this code block, keep as is.
+    'N': 2,    # Rows of first matrix (A is N×M) — default only, overridden by eval.py
+    'M': 2,    # Columns of A / Rows of B (shared dimension) — default only
+    'P': 2,    # Columns of second matrix (B is M×P, result is N×P) — default only
+    'R': 7,    # Target rank — default only, eval.py descends from this value
 }
 
 # Feel free to modify.
-OPTIMIZATION_CONFIG = { 
+OPTIMIZATION_CONFIG = {
     'lr': 0.01,
-    'iterations': 10000,
+    'iterations': 10000,  # note: eval.py passes --iterations 3000 during rank search
     'batch_size': 250,
 }
 
-# Known benchmarks (for square matrices): THIS IS JUST FOR REFERENCE, THIS ISN'T CALLED ANYWHERE.
-KNOWN_SQUARE_RANKS = {
-    (2, 2, 2): 7,   # Strassen (1969)
-    (3, 3, 3): 23,  # AlphaEvolve (2022)
-    (4, 4, 4): 49,
-}
+# Known benchmarks (for reference only — not called anywhere):
+# KNOWN_SQUARE_RANKS = {
+#     (2, 2, 2): 7,   # Strassen (1969)
+#     (3, 3, 3): 23,  # AlphaEvolve (2022)
+#     (4, 4, 4): 49,
+# }
 # --OPTION--
 
 # =============================================================================
