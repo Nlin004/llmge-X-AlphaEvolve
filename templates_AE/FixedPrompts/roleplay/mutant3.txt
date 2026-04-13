@@ -1,7 +1,7 @@
 python
 import jax.numpy as jnp
 
-def cp_decomposition(matrix):
+def cp_decomposition(tensor):
     #... (rest of the function remains the same)
 
 ```python

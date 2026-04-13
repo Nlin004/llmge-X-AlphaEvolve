@@ -1,6 +1,7 @@
-to use `numpy` instead of `jax.numpy`? You can assume that the rest of the code in the `cp_decomposition` function does not need to be modified. 
+to use `numpy` instead of `jax.numpy`? 
+You can assume that the rest of the code does not rely on any JAX-specific functionality. 
 
-Here is the corrected version of the code:
+Here's how you could do it: 
 
 ```python
 {}

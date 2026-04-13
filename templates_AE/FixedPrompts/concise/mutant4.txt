@@ -1,28 +1,78 @@
 python
-import jax.numpy as jnp
+import numpy as np
 
-def cp_decomposition(matrix):
-    # Initialize random weights and factors for each mode
-    weights = jnp.array([0.5, 0.3, 0.2])
-    factors = [jnp.random.rand(10, 1) for _ in range(3)]
+def cp_decomposition(X, R, max_iter=1000, tol=1e-6):
+    """
+    Perform Canonical Polyadic (CP) decomposition using Alternating Least Squares (ALS).
 
-    # Perform iterative updates using ALS (Alternating Least Squares)
-    for _ in range(100):
-        for i in range(3):
-            # Compute Khatri-Rao product of all other modes
-            kr_product = jnp.kron(jnp.kron(factors[0], factors[1]), factors[2]) if i == 0 else \
-                         jnp.kron(jnp.kron(factors[0], factors[2]), factors[1]) if i == 1 else \
-                         jnp.kron(jnp.kron(factors[1], factors[2]), factors[0])
+    Parameters:
+    X (numpy array): Input tensor
+    R (int): Number of components
+    max_iter (int): Maximum number of iterations
+    tol (float): Tolerance for convergence
 
-            # Update factor for current mode
-            factors[i] = jnp.dot(matrix, kr_product)
+    Returns:
+    A (list of numpy arrays): Factor matrices
+    B (list of numpy arrays): Factor matrices
+    """
 
-    return weights, factors
+    # Initialize factor matrices
+    A = [np.random.rand(X.shape[i], R) for i in range(len(X.shape))]
+
+    # Compute Khatri-Rao product
+    def khatri_rao_product(B, A):
+        return np.kron(B, A)
+
+    # Update equations for ALS
+    def update_A(A, B, X):
+        # Compute Khatri-Rao product
+        KR = khatri_rao_product(B[1].T, A[0])
+        for i in range(2, len(X.shape)):
+            KR = np.kron(KR, B[i].T)
+        
+        # Update A
+        A_new = np.linalg.lstsq(KR, X.flatten(), rcond=None)[0]
+        A_new = A_new.reshape((X.shape[0], R))
+        return A_new
+
+    def update_B(A, B, X):
+        # Compute Khatri-Rao product
+        KR = khatri_rao_product(A[0].T, B[1])
+        for i in range(2, len(X.shape)):
+            KR = np.kron(KR, A[i].T)
+        
+        # Update B
+        B_new = np.linalg.lstsq(KR, X.flatten(), rcond=None)[0]
+        B_new = B_new.reshape((X.shape[1], R))
+        return B_new
+
+    # Main loop
+    for _ in range(max_iter):
+        # Update A
+        A_new = update_A(A, A, X)
+        
+        # Update B
+        B_new = update_B(A, A, X)
+        
+        # Check convergence
+        if np.allclose(A, A_new, atol=tol) and np.allclose(A, B_new, atol=tol):
+            break
+        
+        # Update A and B
+        A = A_new
+        B = B_new
+    
+    return A, B
 
 # Example usage
-matrix = jnp.random.rand(10, 10, 10)
-weights, factors = cp_decomposition(matrix)
-print(weights, factors)
+X = np.random.rand(10, 20, 30)
+R = 5
+A, B = cp_decomposition(X, R)
+print("Factor matrices:")
+for i, mat in enumerate(A):
+    print(f"A_{i+1}: {mat.shape}")
+for i, mat in enumerate(B):
+    print(f"B_{i+1}: {mat.shape}")
 
 ```python
 {}

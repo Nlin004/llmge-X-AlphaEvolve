@@ -1,11 +1,28 @@
-Here is a rephrased version of your code with improvements and explanations:
+python
+import jax.numpy as jnp
 
-### CP Decomposition Function
-#### Overview
-The following function performs a CP decomposition on a given input matrix.
-CP decomposition is a technique used to decompose a tensor into a sum of rank-one tensors.
+def cp_decomposition(matrix):
+    # Initialize random weights and factors for each mode
+    weights = jnp.array([0.5, 0.3, 0.2])
+    factors = [jnp.random.rand(10, 1) for _ in range(3)]
 
-#### Code
+    # Perform iterative updates using ALS (Alternating Least Squares)
+    for _ in range(100):
+        for i in range(3):
+            # Compute Khatri-Rao product of all other modes
+            kr_product = jnp.kron(jnp.kron(factors[0], factors[1]), factors[2]) if i == 0 else \
+                         jnp.kron(jnp.kron(factors[0], factors[2]), factors[1]) if i == 1 else \
+                         jnp.kron(jnp.kron(factors[1], factors[2]), factors[0])
+
+            # Update factor for current mode
+            factors[i] = jnp.dot(matrix, kr_product)
+
+    return weights, factors
+
+# Example usage
+matrix = jnp.random.rand(10, 10, 10)
+weights, factors = cp_decomposition(matrix)
+print(weights, factors)
 
 ```python
 {}
