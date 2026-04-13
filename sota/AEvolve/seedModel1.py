@@ -14,15 +14,7 @@
 #
 # EVOLUTION SUGGESTIONS:
 #   - Modify OPTIMIZATION_CONFIG (learning rate, batch size, iterations).
-#   - Do NOT rely on PROBLEM_CONFIG dimensions being fixed — they may change.
 # =============================================================================
-
-PROBLEM_CONFIG = {
-    'N': 2,    # Rows of first matrix (A is N×M) — default only, overridden by eval.py
-    'M': 2,    # Columns of A / Rows of B (shared dimension) — default only
-    'P': 2,    # Columns of second matrix (B is M×P, result is N×P) — default only
-    'R': 7,    # Target rank — default only, eval.py descends from this value
-}
 
 # Feel free to modify.
 OPTIMIZATION_CONFIG = {
