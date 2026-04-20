@@ -205,10 +205,10 @@ def write_bash_script(input_filename_x=f'{SOTA_ROOT}/{SEED_NETWORK}',
         qc_check=QC_CHECK_BOOL,
     ))
     config = load_yaml()
-    if len(config['gpu_selection']) > 0:
-        bash_script_content = config['llm_bash_script'].format(config['gpu_selection'], python_runline)
-    else:
-        bash_script_content = config['llm_bash_script'].format(python_runline)
+    # The current PACE ICE LLM submission template no longer uses a GPU
+    # constraint placeholder. Always format it with the Python command only,
+    # so stale gpu_selection values in YAML cannot leak back into job scripts.
+    bash_script_content = config['llm_bash_script'].format(python_runline)
     return bash_script_content
 
 def create_bash_file(file_path, **kwargs):
