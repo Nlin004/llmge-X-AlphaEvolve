@@ -8,6 +8,10 @@ from llm_utils import (split_file, submit_mixtral, submit_mixtral_hf,
                        clean_code_from_llm, retrieve_base_code)
 
 
+def get_template_root():
+    return globals().get("TEMPLATE_DIR", os.path.join(ROOT_DIR, "templates_AE"))
+
+
 def augment_network(input_filename_x, input_filename_y, output_filename,
                     top_p=0.15, temperature=0.1, apply_quality_control=False,
                     inference_submission=False):
@@ -25,7 +29,7 @@ def augment_network(input_filename_x, input_filename_y, output_filename,
 
     # Select a template file
     template_fname = random.choice(['crossover.txt', 'crossover_s.txt'])
-    template_path = f'{ROOT_DIR}/templates_AE/CrossOver/{template_fname}'
+    template_path = os.path.join(get_template_root(), 'CrossOver', template_fname)
     with open(template_path, 'r') as file:
         template_txt = file.read()
 

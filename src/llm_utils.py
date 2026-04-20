@@ -21,6 +21,11 @@ import textwrap
 from google import genai
 from google.genai import types
 
+
+def get_template_root():
+    return globals().get("TEMPLATE_DIR", os.path.join(ROOT_DIR, "templates_AE"))
+
+
 def retrieve_base_code(idx):
     """Retrieves base code for quality control."""
     base_network = SEED_NETWORK
@@ -137,7 +142,9 @@ def str2bool(v):
 
 def llm_code_qc(code_from_llm, base_code, generate_text):
     # TODO: make parameter
-    template_path = os.path.join(ROOT_DIR, 'templates_AE/llm_quality_control.txt')
+    template_path = os.path.join(get_template_root(), 'llm_quality_control.txt')
+    if not os.path.exists(template_path):
+        return code_from_llm
     with open(template_path, 'r') as file:
         template_txt = file.read()
     # add code to be augmented
@@ -152,7 +159,9 @@ def llm_code_qc(code_from_llm, base_code, generate_text):
 def llm_code_qc_hf(code_from_llm, base_code, generate_text=None):
     # TODO: make parameter
     fname = np.random.choice(['llm_quality_control_p.txt', 'llm_quality_control_p.txt'])
-    template_path = os.path.join(ROOT_DIR, f'templates/{fname}')
+    template_path = os.path.join(get_template_root(), fname)
+    if not os.path.exists(template_path):
+        return code_from_llm
     with open(template_path, 'r') as file:
         template_txt = file.read()
     # add code to be augmented
@@ -414,7 +423,11 @@ def submit_gemini_api(txt2gemini, **kwargs):
     return response.text
 
 def mutate_prompts(n=5):
-    templates = np.random.choice(glob.glob(f'{ROOT_DIR}/templates_AE/FixedPrompts/*/*.txt'), n)
+    template_paths = glob.glob(os.path.join(get_template_root(), 'FixedPrompts', '*', '*.txt'))
+    if len(template_paths) == 0:
+        return
+    sample_count = min(n, len(template_paths))
+    templates = np.random.choice(template_paths, sample_count, replace=False)
     for i, template in enumerate(templates):
         path, filename = os.path.split(template)
         with open(template, 'r') as file:

@@ -2,6 +2,7 @@ import os
 import sys
 import numpy as np
 import platform
+import shutil
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 SOTA_ROOT = os.path.join(ROOT_DIR, 'sota/ACircuitDesign')
@@ -10,9 +11,11 @@ MODEL = "model"
 MODEL_PATH = "/storage/ice-shared/vip-vvk/llm_storage/meta-llama/Llama-3.3-70B-Instruct/"
 VARIANT_DIR = os.path.join(SOTA_ROOT, "models/llmge_models")
 TRAIN_FILE = os.path.join(SOTA_ROOT, "evalC880.py")
+TEMPLATE_DIR = os.path.join(ROOT_DIR, "templates_CD")
 
 OUTPUT_DIR = "c880_test"
 PORT = 8137
+PYTHON_CMD = [sys.executable, "-u"]
 
 CLUSTER = "pace-ice"
 LLM_MODEL = 'llama3.3'
@@ -26,9 +29,9 @@ HUGGING_FACE_BOOL = False
 INFERENCE_SUBMISSION = True
 CUF_TIMEOUT = 20000
 
-LOCAL = False
+LOCAL = shutil.which("sbatch") is None
 if LOCAL:
-    RUN_COMMAND = 'bash'
+    RUN_COMMAND = None
     DELAYED_CHECK = False
 else:
     RUN_COMMAND = 'sbatch'
@@ -56,7 +59,7 @@ EVAL_RUNLINE = "uv run python {} --model {} --variant_dir {VARIANT_DIR}"
 """
 Evolution Constants/Params
 """
-FITNESS_WEIGHTS = (1.0, -1.0)   # minimise correctness error, minimise area
+FITNESS_WEIGHTS = (1.0, -1.0, -1.0)   # minimise correctness error, minimise area, minimise delay
 INVALID_FITNESS_MAX = tuple([float(x * np.inf * -1) for x in FITNESS_WEIGHTS])
 PLACEHOLDER_FITNESS = tuple([int(x * 9999999999 * -1) for x in FITNESS_WEIGHTS])
 NUM_EOT_ELITES = 10

@@ -1,0 +1,6 @@
+Score: 0.5800000000000001
+Error: 0
+Gates: 14
+Depth: 6
+Exact: True
+Config: {'n_inputs': 3, 'target_hex': '0x96', 'target_file': None, 'iterations': 2000, 'batch_size': 256, 'elite_frac': 0.1, 'max_gates': 80, 'seed': 42, 'w_gates': 0.02, 'w_depth': 0.05, 'save_root': 'trained_circuits', 'save_dir': None, 'print_every': 100}

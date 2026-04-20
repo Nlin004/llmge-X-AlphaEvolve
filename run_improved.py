@@ -3,6 +3,7 @@ import copy
 import glob
 import time
 import json
+import sys
 import string
 import random
 import pickle
@@ -17,6 +18,44 @@ from src.llm_utils import split_file, retrieve_base_code, mutate_prompts
 from src.cfg.constants import *
 from src.cfg import constants
 import glob
+
+
+def _quote_cmd_part(part):
+    return f'"{part}"' if " " in str(part) else str(part)
+
+
+def get_template_root():
+    return getattr(constants, "TEMPLATE_DIR", os.path.join(ROOT_DIR, "templates"))
+
+
+def get_python_cmd():
+    return list(getattr(constants, "PYTHON_CMD", [sys.executable, "-u"]))
+
+
+def build_llm_command(input_filename_x, output_filename, python_file, top_p, temperature,
+                      input_filename_y=None, template_file=None, qc_check=False):
+    command = get_python_cmd() + [python_file, input_filename_x]
+    if input_filename_y is not None:
+        command.append(input_filename_y)
+    command.append(output_filename)
+    if template_file is not None:
+        command.append(template_file)
+    command.extend([
+        "--top_p", str(top_p),
+        "--temperature", str(temperature),
+        "--apply_quality_control", str(qc_check),
+        "--inference_submission", str(INFERENCE_SUBMISSION),
+    ])
+    return command
+
+
+def build_eval_command(gene_id, train_file=f'{TRAIN_FILE}'):
+    model_file_override = RUNLINE_TMP.format(MODEL, gene_id)
+    return get_python_cmd() + [
+        train_file,
+        "--model", model_file_override,
+        "--variant_dir", VARIANT_DIR,
+    ]
 
 def print_ancestry(data):
     for gene in data.keys():
@@ -90,6 +129,7 @@ def generate_template(PROB_EOT, GEN_COUNT, TOP_N_GENES, SOTA_ROOT, SEED_NETWORK,
     mutation_type : str
         The type of mutation generated
     """
+    template_root = get_template_root()
     if (PROB_EOT > np.random.uniform()) and (GEN_COUNT > 0):
         print("\t‣ EoT")
         top_gene = np.random.choice([x[0] for x in TOP_N_GENES])
@@ -100,19 +140,19 @@ def generate_template(PROB_EOT, GEN_COUNT, TOP_N_GENES, SOTA_ROOT, SEED_NETWORK,
         for x, y, augment_idx in parts:
             if x.strip() != y.strip():
                 break
-        eot_template_path = os.path.join(ROOT_DIR, 'templates/EoT/EoT.txt')
+        eot_template_path = os.path.join(template_root, 'EoT', 'EoT.txt')
         with open(eot_template_path, 'r') as file:
             eot_template_txt = file.read()
         template_txt = eot_template_txt.format(x, y, "{}")
         mute_type = "EoT"
     else:
         print("\t‣ FixedPrompts")
-        prompt_templates = glob.glob(f'{ROOT_DIR}/templates/FixedPrompts/*/*.txt')
+        prompt_templates = glob.glob(os.path.join(template_root, 'FixedPrompts', '*', '*.txt'))
         template_path = np.random.choice(prompt_templates)
         mute_type = os.path.basename(template_path).split('.')[0]  # Assuming the file extension needs to be removed
         with open(template_path, 'r') as file:
             template_txt = file.read()
-        with open(f'{ROOT_DIR}/templates/ConstantRules.txt', 'r') as file:
+        with open(os.path.join(template_root, 'ConstantRules.txt'), 'r') as file:
             rules_txt = file.read()
         template_txt = f'{template_txt}\n{rules_txt}'
     return template_txt, mute_type
@@ -136,6 +176,7 @@ def write_bash_script(input_filename_x=f'{SOTA_ROOT}/{SEED_NETWORK}',
     os.makedirs(dir_path, exist_ok=True)
     gene_id_parent = fetch_gene(input_filename_x)
     gene_id_child = fetch_gene(output_filename)
+    template_file = None
     if python_file=='src/llm_mutation.py':
         template_txt, mute_type = generate_template(PROB_EOT, GEN_COUNT, TOP_N_GENES, 
                                                     SOTA_ROOT, SEED_NETWORK, ROOT_DIR)
@@ -143,21 +184,26 @@ def write_bash_script(input_filename_x=f'{SOTA_ROOT}/{SEED_NETWORK}',
             GLOBAL_DATA_ANCESTRY = update_ancestry(gene_id_child, gene_id_parent, GLOBAL_DATA_ANCESTRY, 
                                                     mutation_type=mute_type, gene_id_parent2=None)
         out_dir = os.path.join(OUTPUT_DIR, str(GENERATION))
-        file_path = os.path.join(out_dir, f'{gene_id_child}_model.txt')
+        template_file = os.path.join(out_dir, f'{gene_id_child}_model.txt')
         os.makedirs(out_dir, exist_ok=True)
-        with open(file_path, 'w') as file:
+        with open(template_file, 'w') as file:
             file.write(template_txt)
-        temp_text = f'{python_file} {input_filename_x} {output_filename} {file_path} --top_p {top_p} --temperature {temperature}'
-        python_runline = f"uv run python {temp_text} --apply_quality_control '{QC_CHECK_BOOL}' --inference_submission {INFERENCE_SUBMISSION}"
     elif python_file=='src/llm_crossover.py':
         gene_id_parent2 = fetch_gene(input_filename_y)
         GLOBAL_DATA_ANCESTRY = update_ancestry(gene_id_child, gene_id_parent, GLOBAL_DATA_ANCESTRY, 
                                                 mutation_type=None, gene_id_parent2=gene_id_parent2)
-        
-        temp_text = f"{python_file} {input_filename_x} {input_filename_y} {output_filename} --top_p {top_p} --temperature {temperature}"
-        python_runline = f"uv run python {temp_text} --apply_quality_control '{QC_CHECK_BOOL}' --inference_submission {INFERENCE_SUBMISSION}"
     else:
         raise ValueError("Invalid python_file argument")
+    python_runline = " ".join(_quote_cmd_part(part) for part in build_llm_command(
+        input_filename_x=input_filename_x,
+        input_filename_y=input_filename_y,
+        output_filename=output_filename,
+        python_file=python_file,
+        top_p=top_p,
+        temperature=temperature,
+        template_file=template_file,
+        qc_check=QC_CHECK_BOOL,
+    ))
     config = load_yaml()
     if len(config['gpu_selection']) > 0:
         bash_script_content = config['llm_bash_script'].format(config['gpu_selection'], python_runline)
@@ -183,12 +229,35 @@ def submit_bash(file_path, **kwargs):
         job_id
     """
     create_bash_file(file_path, **kwargs)
+    if LOCAL:
+        template_file = None
+        if kwargs.get("python_file") == 'src/llm_mutation.py':
+            gene_id_child = os.path.basename(kwargs["output_filename"]).replace(f'{MODEL}_', '').replace('.py', '')
+            template_file = os.path.join(OUTPUT_DIR, str(GENERATION), f'{gene_id_child}_model.txt')
+        result = subprocess.run(
+            build_llm_command(
+                input_filename_x=kwargs["input_filename_x"],
+                input_filename_y=kwargs.get("input_filename_y"),
+                output_filename=kwargs["output_filename"],
+                python_file=kwargs["python_file"],
+                top_p=kwargs.get("top_p", 0.1),
+                temperature=kwargs.get("temperature", 0.2),
+                template_file=template_file,
+                qc_check=PROB_QC > np.random.uniform(),
+            ),
+            capture_output=True,
+            text=True,
+        )
+        local_output = (result.stdout.strip() + '\n' + result.stderr.strip()).strip()
+        if result.returncode == 0:
+            return True, None, local_output
+        return False, None, local_output
     result = subprocess.run([RUN_COMMAND, file_path], capture_output=True, text=True)
     local_output = None
-    if result.returncode == 0 and LOCAL:
+    if result.returncode == 0:
         local_output = result.stdout.strip()
         print("\t‣ Output:", result.stdout.strip(), flush=True)
-        job_id = None
+        job_id = result.stdout.split('job ')[-1].strip()
         successful_sub_flag = True
     elif result.returncode == 0:
         print("\t‣ Output:", result.stdout.strip(), flush=True)
@@ -212,10 +281,14 @@ def check_contents_for_error(contents):
     bool: True if job completed successfully, False if error, None if neither.  
     """
     # Check for error indicators in the file
-    if "traceback" in contents.lower() or "slurmstepd: error" in contents.lower():
+    lowered = contents.lower()
+    if ("traceback" in lowered or "slurmstepd: error" in lowered or "[syntax error]" in lowered
+            or "result: fail" in lowered or "logic mismatch" in lowered
+            or "error: design.v not generated." in lowered or "filenotfounderror" in lowered
+            or "failed to execute local" in lowered):
         print("\t☠ Error Found in LLM Job Output.", flush=True)
         return False
-    elif "job done" in contents.lower():
+    elif "job done" in lowered or "metrics saved:" in lowered:
         print("\t☑ LLM Job Completed Successfully.", flush=True)
         return True
     else:
@@ -312,8 +385,7 @@ def create_individual(container, temp_min=0.05, temp_max=0.4):
 
 def submit_run(gene_id):
     def write_bash_script_py(gene_id, train_file=f'{TRAIN_FILE}'):
-        model_file_override = RUNLINE_TMP.format(MODEL, gene_id) 
-        python_runline = EVAL_RUNLINE.format(train_file, model_file_override, VARIANT_DIR=VARIANT_DIR)
+        python_runline = " ".join(_quote_cmd_part(part) for part in build_eval_command(gene_id, train_file=train_file))
         config = load_yaml()
         bash_script_content = config['python_bash_script'].format(python_runline)
         return bash_script_content
@@ -330,11 +402,20 @@ def submit_run(gene_id):
         job_id = None
         successful_sub_flag = False
         local_output = None
-        result = subprocess.run([RUN_COMMAND, file_path], capture_output=True, text=True)
         if LOCAL:
+            result = subprocess.run(
+                build_eval_command(gene_id, train_file=kwargs.get("train_file", TRAIN_FILE)),
+                capture_output=True,
+                text=True,
+            )
+            local_output = result.stdout.strip() + '\n' + result.stderr.strip()
+            print("\tOutput:", local_output, flush=True)
+            return result.returncode == 0, None, local_output
+        result = subprocess.run([RUN_COMMAND, file_path], capture_output=True, text=True)
+        if result.returncode == 0:
             local_output = result.stdout.strip() + '\n' + result.stderr.strip()
             print("\t‣ Output:", local_output, flush=True)
-            job_id = None
+            job_id = result.stdout.split('job ')[-1].strip()
             successful_sub_flag = True
         elif result.returncode == 0:
             print("\t‣ Script Submitted Successfully.\n\t‣ Output:", result.stdout.strip())
