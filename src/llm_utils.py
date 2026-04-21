@@ -33,6 +33,9 @@ def retrieve_base_code(idx):
 
 def clean_code_from_llm(code_from_llm):
     """Cleans the code received from LLM."""
+    if not code_from_llm:
+        raise ValueError("No code received from the LLM.")
+
     code_generator = None
     # Select Correct LLM
     if LLM_MODEL == 'mixtral' or LLM_MODEL == 'llama3.3':
@@ -59,7 +62,9 @@ def clean_code_from_llm(code_from_llm):
         #     verified_code = code_generator(prompt, top_p=0.15, temperature=0.1) 
         #     print(verified_code)
         #     return '\n'.join(verified_code.strip().split("```")[1].split('\n')[1:])
-   
+    if "```" not in code_from_llm:
+        raise ValueError("LLM response did not include a fenced code block.")
+
     return '\n'.join(code_from_llm.strip().split("```")[1].split('\n')[1:])
 
 def generate_augmented_code(txt2llm, augment_idx, apply_quality_control, top_p, temperature, inference_submission=False):
@@ -105,6 +110,9 @@ def generate_augmented_code(txt2llm, augment_idx, apply_quality_control, top_p, 
         box_print("TEXT FROM LLM", print_bbox_len=60, new_line_end=False)
         
         print(code_from_llm)
+
+    if not code_from_llm:
+        raise RuntimeError("Failed to get a valid response from the LLM after 3 retries.")
 
     box_print("CODE FROM LLM", print_bbox_len=60, new_line_end=False)
     code_from_llm = clean_code_from_llm(code_from_llm)
@@ -287,7 +295,7 @@ def submit_mixtral_local(prompt, max_new_tokens=850, temperature=0.2, top_p=0.15
     server_url = f"http://{llm_hostname}:{PORT}/generate"
     
     try:
-        response = requests.post(server_url, headers=headers, json=payload)
+        response = requests.post(server_url, headers=headers, json=payload, timeout=600)
         
         if response.status_code == 200:
             output_txt = response.json().get("generated_text", "No output received.")
@@ -316,7 +324,7 @@ def submit_deepseek_local(prompt, max_new_tokens=850, temperature=0.2, top_p=0.1
     headers = {"Content-Type": "application/json"}
     
     try:
-        response = requests.post(server_url, headers=headers, json=payload)
+        response = requests.post(server_url, headers=headers, json=payload, timeout=600)
         
         if response.status_code == 200:
             output_txt = response.json().get("generated_text", "No output received.")
