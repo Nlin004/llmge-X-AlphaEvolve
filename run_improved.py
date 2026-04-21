@@ -413,18 +413,15 @@ def submit_run(gene_id):
             return result.returncode == 0, None, local_output
         result = subprocess.run([RUN_COMMAND, file_path], capture_output=True, text=True)
         if result.returncode == 0:
-            local_output = result.stdout.strip() + '\n' + result.stderr.strip()
-            print("\t‣ Output:", local_output, flush=True)
+            print("\t‣ Output:", result.stdout.strip(), flush=True)
             job_id = result.stdout.split('job ')[-1].strip()
             successful_sub_flag = True
-        elif result.returncode == 0:
-            print("\t‣ Script Submitted Successfully.\n\t‣ Output:", result.stdout.strip())
-            successful_sub_flag = True
-            job_id = result.stdout.split('job ')[-1].strip()
+            local_output = None
         else:
             print("\t‣ Failed to Submit script.\n\t‣ Error:", result.stderr.strip())
             successful_sub_flag = False
             job_id = None
+            local_output = None
         return successful_sub_flag, job_id, local_output
     
     out_dir = os.path.join(OUTPUT_DIR, str(GENERATION))
