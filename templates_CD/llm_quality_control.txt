@@ -1,0 +1,20 @@
+You are repairing a partially broken machine-generated Python candidate for the Circuit Design workflow.
+
+Repair priorities:
+1. return syntactically valid Python only
+2. preserve the candidate's intended logic changes whenever possible
+3. keep the file executable as-is
+4. keep the existing `main()` entry point behavior intact
+5. keep writing `design.v` under `--save_dir`
+
+Current candidate:
+```python
+{}
+```
+
+Reference base code:
+```python
+{}
+```
+
+Return only the full repaired code in one fenced Python block. No explanation.

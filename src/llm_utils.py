@@ -36,6 +36,12 @@ def clean_code_from_llm(code_from_llm):
     if not code_from_llm:
         raise ValueError("No code received from the LLM.")
 
+    fenced_blocks = re.findall(r"```(?:[A-Za-z0-9_+-]+)?\n(.*?)```", code_from_llm, flags=re.DOTALL)
+    if fenced_blocks:
+        # Prefer the largest fenced block because some models emit a short
+        # example followed by the real full candidate.
+        return max(fenced_blocks, key=len).strip()
+
     code_generator = None
     # Select Correct LLM
     if LLM_MODEL == 'mixtral' or LLM_MODEL == 'llama3.3':
@@ -62,10 +68,11 @@ def clean_code_from_llm(code_from_llm):
         #     verified_code = code_generator(prompt, top_p=0.15, temperature=0.1) 
         #     print(verified_code)
         #     return '\n'.join(verified_code.strip().split("```")[1].split('\n')[1:])
-    if "```" not in code_from_llm:
-        raise ValueError("LLM response did not include a fenced code block.")
+    stripped = code_from_llm.strip()
+    if stripped.startswith(("def ", "class ", "from ", "import ", "module ", "```python", "```verilog")):
+        return stripped
 
-    return '\n'.join(code_from_llm.strip().split("```")[1].split('\n')[1:])
+    raise ValueError("LLM response did not include a recognizable code block.")
 
 def generate_augmented_code(txt2llm, augment_idx, apply_quality_control, top_p, temperature, inference_submission=False):
     """Generates augmented code using Mixtral."""
@@ -159,9 +166,18 @@ def llm_code_qc(code_from_llm, base_code, generate_text):
     prompt2llm = template_txt.format(code_from_llm, base_code)
     print("="*120);print(prompt2llm);print("="*120)
     
-    res = generate_text(prompt2llm) # clean txt
-    code_from_llm = res[0]["generated_text"]
-    code_from_llm = '\n'.join(code_from_llm.strip().split("```")[1].split('\n')[1:]).strip()
+    if generate_text is None:
+        code_from_llm = submit_mixtral_local(
+            prompt2llm,
+            max_new_tokens=1500,
+            top_p=0.1,
+            temperature=0.1,
+            return_gen=False,
+        )
+    else:
+        res = generate_text(prompt2llm) # clean txt
+        code_from_llm = res[0]["generated_text"]
+    code_from_llm = clean_code_from_llm(code_from_llm).strip()
     return code_from_llm
 
 def llm_code_qc_hf(code_from_llm, base_code, generate_text=None):
@@ -303,7 +319,7 @@ def submit_mixtral_local(prompt, max_new_tokens=850, temperature=0.2, top_p=0.15
             if return_gen is False:
                 return output_txt
             else:
-                return output_txt, generate_text
+                return output_txt, None
         else:
             print(f"Error: {response.status_code}")
             print(response.text)
@@ -332,7 +348,7 @@ def submit_deepseek_local(prompt, max_new_tokens=850, temperature=0.2, top_p=0.1
             if return_gen is False:
                 return output_txt
             else:
-                return output_txt, generate_text
+                return output_txt, None
         else:
             print(f"Error: {response.status_code}")
             print(response.text)
