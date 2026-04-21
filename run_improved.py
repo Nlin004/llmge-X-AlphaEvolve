@@ -270,22 +270,37 @@ def submit_bash(file_path, **kwargs):
         job_id = None
     return successful_sub_flag, job_id, local_output
 
-def check_contents_for_error(contents):
+def check_contents_for_error(contents, stage="llm"):
     """
     Checks the output of a job for any signs of error.
 
     Parameters:
     contents (str): output of job to check for error
+    stage (str): either "llm" for code-generation jobs or "eval" for model-evaluation jobs
 
     Returns:
     bool: True if job completed successfully, False if error, None if neither.  
     """
-    # Check for error indicators in the file
     lowered = contents.lower()
-    if ("traceback" in lowered or "slurmstepd: error" in lowered or "[syntax error]" in lowered
-            or "result: fail" in lowered or "logic mismatch" in lowered
-            or "error: design.v not generated." in lowered or "filenotfounderror" in lowered
-            or "failed to execute local" in lowered):
+
+    # Evaluation jobs may report logic mismatches for bad candidates while still
+    # saving a usable fitness file. Treat that saved metrics line as success so
+    # weak candidates are scored instead of discarded as infrastructure failures.
+    if stage == "eval" and ("metrics saved:" in lowered or "job done" in lowered):
+        print("\tâ˜‘ LLM Job Completed Successfully.", flush=True)
+        return True
+
+    error_markers = [
+        "traceback",
+        "slurmstepd: error",
+        "[syntax error]",
+        "error: design.v not generated.",
+        "filenotfounderror",
+        "failed to execute local",
+    ]
+    if stage != "eval":
+        error_markers.extend(["result: fail", "logic mismatch"])
+    if any(marker in lowered for marker in error_markers):
         print("\t☠ Error Found in LLM Job Output.", flush=True)
         return False
     elif "job done" in lowered or "metrics saved:" in lowered:
@@ -294,7 +309,7 @@ def check_contents_for_error(contents):
     else:
         return None
 
-def check4job_completion(job_id, local_output=None, check_interval=60, timeout=15500): 
+def check4job_completion(job_id, local_output=None, check_interval=60, timeout=15500, stage="llm"): 
     """
     Check for the completion of a job by searching for its output file and scanning for errors.
     Parameters
@@ -311,7 +326,7 @@ def check4job_completion(job_id, local_output=None, check_interval=60, timeout=1
         True if job completed successfully, False otherwise
     """
     if local_output is not None:
-        state = check_contents_for_error(local_output)
+        state = check_contents_for_error(local_output, stage=stage)
         if state is None:
             raise Exception('Unexpected output from job')
         else:
@@ -330,7 +345,7 @@ def check4job_completion(job_id, local_output=None, check_interval=60, timeout=1
         if os.path.exists(output_file):
             with open(output_file, 'r') as file:
                 contents = file.read()
-                state = check_contents_for_error(contents)
+                state = check_contents_for_error(contents, stage=stage)
                 if state is None:
                     pass
                 else:
@@ -464,7 +479,7 @@ def check4results(gene_id):
     def check4error(gene_id):
         job_id = GLOBAL_DATA[gene_id]['results_job']
         if GLOBAL_DATA[gene_id]['local_output'] is not None:
-            state = check_contents_for_error(GLOBAL_DATA[gene_id]['local_output'])
+            state = check_contents_for_error(GLOBAL_DATA[gene_id]['local_output'], stage="eval")
             if state is None:
                 print(GLOBAL_DATA[gene_id]['local_output'], flush=True) 
                 raise Exception('Unexpected output from job')
@@ -476,7 +491,7 @@ def check4results(gene_id):
         if os.path.exists(output_file):
             with open(output_file, 'r') as file:
                 contents = file.read()
-                state = check_contents_for_error(contents)
+                state = check_contents_for_error(contents, stage="eval")
                 if state is None:
                     pass
                 else:
@@ -489,6 +504,11 @@ def check4results(gene_id):
         # The job saves the model results to a file f'{gene_id}_results.txt'
         # results_path = os.path.join(out_dir, f'{gene_id}_results.txt')
         results_path = f'{SOTA_ROOT}/results/{gene_id}_results.txt'
+        if not os.path.exists(results_path):
+            print(f'\tâ˜  Results file does not exist for gene_id: {gene_id}, marking invalid.')
+            GLOBAL_DATA[gene_id]['status'] = 'completed'
+            GLOBAL_DATA[gene_id]['fitness'] = INVALID_FITNESS_MAX
+            return
         with open(results_path, 'r') as file:
             results = file.read()
         results = results.split(',')
@@ -898,7 +918,10 @@ def createPopulation():
     population = toolbox.population(n=start_population_size)
     box_print("Batch Checking Created Genes", print_bbox_len=60, new_line_end=False)
     delayed_creation_check(population)
-    hof = tools.ParetoFront()
+    for ind in population:
+        ind.fitness.values = PLACEHOLDER_FITNESS
+    check_and_update_fitness(population)
+    return population
 
 # Define the problem
 creator.create("FitnessMulti", base.Fitness, weights=FITNESS_WEIGHTS)  # Adjust weights as needed
@@ -956,10 +979,7 @@ if __name__ == "__main__":
     else:
         # Create an initial population
         start_gen = 0
-        box_print("CREATING POPULATION FROM SEED CODE")
-        population = toolbox.population(n=start_population_size)
-        box_print("Batch Checking Created Genes", print_bbox_len=60, new_line_end=False)
-        delayed_creation_check(population)
+        population = createPopulation()
         hof = tools.ParetoFront()
 
     # Evaluate the entire population
@@ -986,7 +1006,8 @@ if __name__ == "__main__":
         count = 0
         for i in range(5):
             if len(population) == 0:
-                createPopulation()
+                population = createPopulation()
+                population = [ind for ind in population if ind.fitness.values != INVALID_FITNESS_MAX]
             else:
                 break
 
