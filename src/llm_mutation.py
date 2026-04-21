@@ -10,7 +10,8 @@ from pathlib import Path
 
 from llm_utils import (split_file, submit_mixtral, submit_mixtral_hf, 
                        llm_code_qc, str2bool, generate_augmented_code, 
-                       extract_note, clean_code_from_llm, retrieve_base_code)
+                       extract_note, clean_code_from_llm, retrieve_base_code,
+                       validate_augmented_file)
 
 def augment_network(input_filename='network.py', output_filename='network_x.py', template_txt=None,
                     top_p=0.15, temperature=0.1, apply_quality_control=False, inference_submission=False):
@@ -35,6 +36,7 @@ def augment_network(input_filename='network.py', output_filename='network_x.py',
     # prompt_log = f'# Parent Prompt: {template_path} Root Code: {input_filename}\n'
     # python_network_txt = prompt_log + '# --OPTION--'.join(parts)
     python_network_txt = '# --OPTION--'.join(parts)
+    validate_augmented_file(python_network_txt)
     # Write the text to the file
     output_file = Path(output_filename)
     output_file.parent.mkdir(exist_ok=True, parents=True)

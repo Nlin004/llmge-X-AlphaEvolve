@@ -1,4 +1,5 @@
 import argparse
+import ast
 import sys
 sys.path.append("src")
 import re
@@ -30,6 +31,83 @@ def retrieve_base_code(idx):
     """Retrieves base code for quality control."""
     base_network = SEED_NETWORK
     return split_file(base_network)[1:][idx].strip()
+
+
+def _top_level_defs(code_text):
+    """Return the names of top-level functions/classes defined in a code block."""
+    try:
+        tree = ast.parse(code_text)
+    except SyntaxError as exc:
+        raise ValueError(f"Candidate block is not valid Python: {exc}") from exc
+
+    names = []
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            names.append(node.name)
+    return tree, names
+
+
+def validate_candidate_block(candidate_code, base_code):
+    """
+    Validate that a mutated block still matches the structural contract of the
+    block it replaced. This prevents semantically unrelated Python from being
+    stitched into the seed file.
+    """
+    candidate_tree, candidate_names = _top_level_defs(candidate_code)
+    _, base_names = _top_level_defs(base_code)
+
+    missing_names = [name for name in base_names if name not in candidate_names]
+    if missing_names:
+        raise ValueError(f"Candidate block is missing required definitions: {missing_names}")
+
+    if "generate_seed_verilog" in base_names:
+        if "module c880_impl" not in candidate_code:
+            raise ValueError("Candidate generate_seed_verilog block no longer contains the c880_impl module.")
+
+        # The mutation target for C880 should remain a pure definition block,
+        # not an executable script that runs arbitrary code during import.
+        disallowed_nodes = (
+            ast.For, ast.While, ast.If, ast.With, ast.Try, ast.Match,
+            ast.Expr,
+        )
+        for node in candidate_tree.body:
+            if isinstance(node, disallowed_nodes):
+                # Allow docstring-like constant expressions only.
+                if isinstance(node, ast.Expr) and isinstance(getattr(node, "value", None), ast.Constant):
+                    continue
+                raise ValueError("Candidate block contains top-level executable statements unrelated to the Verilog generator.")
+
+    if "main" in base_names:
+        required_strings = ["--save_dir", "design.v"]
+        for needle in required_strings:
+            if needle not in candidate_code:
+                raise ValueError(f"Candidate main block is missing required token: {needle}")
+
+    return True
+
+
+def validate_augmented_file(full_code_text):
+    """Validate the stitched candidate module before it is written to disk."""
+    try:
+        tree = ast.parse(full_code_text)
+    except SyntaxError as exc:
+        raise ValueError(f"Full candidate file is not valid Python: {exc}") from exc
+
+    defined_names = {
+        node.name
+        for node in tree.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+    }
+
+    required_names = {"create_save_dir", "generate_seed_verilog", "main"}
+    missing = sorted(required_names - defined_names)
+    if missing:
+        raise ValueError(f"Full candidate file is missing required definitions: {missing}")
+
+    if "module c880_impl" not in full_code_text:
+        raise ValueError("Full candidate file is missing the c880_impl Verilog payload.")
+
+    return True
 
 def clean_code_from_llm(code_from_llm):
     """Cleans the code received from LLM."""
@@ -95,10 +173,10 @@ def generate_augmented_code(txt2llm, augment_idx, apply_quality_control, top_p, 
             llm_code_generator = submit_deepseek_local
         qc_func = llm_code_qc_hf
         
+    base_code = retrieve_base_code(augment_idx)
     retries = 0
     while retries < 3:
         if apply_quality_control:
-            base_code = retrieve_base_code(augment_idx)
             code_from_llm, generate_text = llm_code_generator(txt2llm, return_gen=True, top_p=top_p, temperature=temperature)
             code_from_llm = qc_func(code_from_llm, base_code, generate_text)
         else:
@@ -110,23 +188,21 @@ def generate_augmented_code(txt2llm, augment_idx, apply_quality_control, top_p, 
             retries += 1
             print("Response Invalid")
             continue
-        else:
-            print("Response Valid")
-            break
 
-        box_print("TEXT FROM LLM", print_bbox_len=60, new_line_end=False)
-        
-        print(code_from_llm)
+        try:
+            cleaned_code = clean_code_from_llm(code_from_llm)
+            validate_candidate_block(cleaned_code, base_code)
+        except ValueError as exc:
+            retries += 1
+            print(f"Response Invalid: {exc}")
+            continue
 
-    if not code_from_llm:
-        raise RuntimeError("Failed to get a valid response from the LLM after 3 retries.")
+        print("Response Valid")
+        box_print("CODE FROM LLM", print_bbox_len=60, new_line_end=False)
+        print(cleaned_code)
+        return cleaned_code
 
-    box_print("CODE FROM LLM", print_bbox_len=60, new_line_end=False)
-    code_from_llm = clean_code_from_llm(code_from_llm)
-
-    print(code_from_llm)
-    
-    return code_from_llm 
+    raise RuntimeError("Failed to get a valid response from the LLM after 3 retries.")
 
 def extract_note(txt):
     """Extracts note from the part if present."""

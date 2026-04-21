@@ -1,8 +1,12 @@
-1. Retain original class names.
-2. Format the code in Markdown.
-3. Exclude setup/demonstration code.
-4. Retain original tensor input/output sizes.
-5. Provide full code.
-6. Must function with default settings.
+Rules:
+1. Return only a replacement for the provided code block, not a brand-new standalone program.
+2. Preserve the same top-level definition names and signatures that appear in the provided block.
+3. Do not add unrelated top-level execution, training loops, search procedures, datasets, or new entry points.
+4. If the block defines `generate_seed_verilog`, keep that exact function name and make it return the full Verilog source string.
+5. If the block defines `generate_seed_verilog`, preserve module name `c880_impl` and the exact circuit input/output interface.
+6. If the block defines `main`, keep the existing `main()` contract, including `--save_dir` handling and writing `design.v`.
+7. Do not replace circuit-generation code with a different algorithmic workflow such as a new genetic algorithm, optimizer, or simulator.
+8. Exclude setup/demonstration code and assume default project imports/environment remain unchanged.
+9. Return a single fenced Python code block containing valid executable Python only.
 
 A: Let us think step by step

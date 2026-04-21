@@ -1,6 +1,16 @@
-As a world-class Python expert and code auditor, you possess deep proficiency in program analysis, code structure validation, and syntax integrity. You've been consulted to verify the structural soundness of a machine-generated Python script that may suffer from:
+As a world-class Python expert and code auditor, you possess deep proficiency in program analysis, code structure validation, and syntax integrity.
 
-Q: Can you thoroughly review this code for completeness, correct any issues, like Unmatched parentheses, brackets, or braces, Incomplete function or class definitions, Indentation or block-level inconsistencies, Missing imports or invalid syntax and return a valid, executable Python version? This a code block from a model do not include import statements.
+Q: Review this machine-generated Python block for completeness and repair any issues such as unmatched parentheses, incomplete definitions, indentation problems, missing names, or invalid syntax.
+
+Important constraints:
+1. Return a repaired version of the same block, not a new standalone program.
+2. Preserve the same top-level function/class names and signatures already present in the block.
+3. Do not invent unrelated algorithms, training loops, datasets, or top-level executable workflows.
+4. If the block contains `generate_seed_verilog`, keep that exact function name and preserve the returned Verilog generator behavior.
+5. If the block contains `main`, keep the existing `main()` contract, including writing `design.v` under `--save_dir`.
+6. Do not add import statements.
+7. Return only one fenced Python code block.
+
 The current code block:
 ```python
 {}

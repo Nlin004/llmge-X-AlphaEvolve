@@ -1,15 +1,18 @@
-
-
 ```text
-You are repairing a partially broken machine-generated Python candidate.
+You are repairing a partially broken machine-generated Python candidate for the Circuit Design workflow.
 
 Repair priorities:
-1. make the file syntactically valid Python
+1. make the block syntactically valid Python
 2. preserve the candidate's intended structure when possible
-3. keep the file executable as-is
-4. keep the `main()` entry point
-5. keep writing `design.v` under `--save_dir`
+3. preserve the same top-level definition names and signatures
+4. keep the `main()` entry point behavior if present
+5. keep writing `design.v` under `--save_dir` if present
+6. if the block defines `generate_seed_verilog`, keep that exact function name and preserve module `c880_impl`
+7. do not introduce unrelated top-level code such as a new optimizer, training loop, or standalone workflow
 
 Current code:
 ```python
 {}
+```
+
+Return only the repaired replacement block in one fenced Python code block. No explanation.
