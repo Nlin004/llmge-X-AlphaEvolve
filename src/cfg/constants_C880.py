@@ -67,10 +67,10 @@ GENERATION = 0
 PROB_QC = 1.0
 PROB_EOT = 0.25
 num_generations = 20
-start_population_size = 8
-population_size = 8
-crossover_probability = 0.35
-mutation_probability = 0.8
+start_population_size = 32
+population_size = 32
+crossover_probability = 0.2
+mutation_probability = 0.5
 num_elites = 20
 hof_size = 50
 

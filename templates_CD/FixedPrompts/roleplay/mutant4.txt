@@ -1,0 +1,86 @@
+python
+import random
+
+def generate_circuit(gates):
+    # Generate a random circuit with 'gates' number of nodes (logic operations)
+    circuit = []
+    for _ in range(gates):
+        gate_type = random.choice(['AND', 'OR', 'NOT'])
+        if gate_type == 'NOT':
+            inputs = [random.randint(0, gates-1)]
+        else:
+            inputs = sorted(random.sample(range(gates), 2))
+        circuit.append((gate_type, inputs))
+    return circuit
+
+def evaluate_circuit(circuit, truth_table):
+    # Evaluate the generated circuit against the given truth table
+    outputs = []
+    for input_combination in truth_table:
+        values = [False] * len(circuit)
+        for i, (gate_type, inputs) in enumerate(circuit):
+            if gate_type == 'AND':
+                values[i] = all([values[j] if j < i else input_combination[j] for j in inputs])
+            elif gate_type == 'AND' == False and gate_type == 'OR':
+                values[i] = any([values[j] if j < i else input_combination[j] for j in inputs])
+            elif gate_type == 'NOT':
+                values[i] = not (values[inputs[0]] if inputs[0] < i else input_combination[inputs[0]])
+        outputs.append(values[-1])
+    return outputs
+
+def fitness(circuit, truth_table):
+    # Calculate the fitness of the circuit based on the difference between its output and the target truth table
+    predicted_outputs = evaluate_circuit(circuit, truth_table)
+    target_outputs = [row[-1] for row in truth_table]
+    correct_predictions = sum([p == t for p, t in zip(predicted_outputs, target_outputs)])
+    return correct_predictions / len(truth_table)
+
+def mutate_circuit(circuit):
+    # Randomly modify the circuit by changing a gate type or its inputs
+    mutation_type = random.choice(['change_gate', 'change_inputs'])
+    if mutation_type == 'change_gate':
+        gate_index = random.randint(0, len(circuit)-1)
+        new_gate_type = random.choice(['AND', 'OR', 'NOT'])
+        while new_gate_type == circuit[gate_index][0]:
+            new_gate_type = random.choice(['AND', 'OR', 'NOT'])
+        circuit[gate_index] = (new_gate_type, circuit[gate_index][1])
+    else:
+        gate_index = random.randint(0, len(circuit)-1)
+        if circuit[gate_index][0] == 'NOT':
+            new_inputs = [random.randint(0, len(circuit)-1)]
+        else:
+            new_inputs = sorted(random.sample(range(len(circuit)), 2))
+        circuit[gate_index] = (circuit[gate_index][0], new_inputs)
+    return circuit
+
+def genetic_algorithm(truth_table, population_size=100, generations=100):
+    # Initialize a population of random circuits
+    population = [generate_circuit(random.randint(1, 10)) for _ in range(population_size)]
+
+    for generation in range(generations):
+        # Evaluate the fitness of each circuit
+        fitnesses = [fitness(circuit, truth_table) for circuit in population]
+
+        # Select the fittest circuits
+        selected_indices = sorted(range(len(fitnesses)), key=lambda i: fitnesses[i], reverse=True)[:int(population_size/2)]
+        selected_circuits = [population[i] for i in selected_indices]
+
+        # Create offspring by mutating the selected circuits
+        offspring = []
+        for _ in range(population_size - len(selected_circuits)):
+            parent = random.choice(selected_circuits)
+            offspring.append(mutate_circuit(parent[:]))
+
+        # Replace the least fit circuits with the new offspring
+        population = selected_circuits + offspring
+
+    return max(population, key=lambda circuit: fitness(circuit, truth_table))
+
+# Example usage:
+truth_table = [
+    [False, False, False],
+    [False, False, True],
+    [False, True, False],
+```python
+{}
+```

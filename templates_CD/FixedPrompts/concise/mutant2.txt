@@ -1,0 +1,21 @@
+python
+def mutate(gates):
+    # Randomly select a gate to modify
+    gate_to_modify = random.choice(list(gates.keys()))
+    
+    # Randomly choose an operator from the list of operators
+    new_operator = random.choice(operators)
+    
+    # Replace the old operator with the new one
+    gates[gate_to_modify] = new_operator
+    
+    return gates
+
+# Example usage:
+gates = {'A': 'AND', 'B': 'OR'}
+mutated_gates = mutate(gates)
+print(mutated_gates)
+
+```python
+{}
+```

@@ -1,0 +1,46 @@
+python
+import random
+
+def generate_circuit(gates):
+    # Generate a random circuit given the number of gates.
+    circuit = []
+    for _ in range(gates):
+        gate_type = random.choice(['AND', 'OR', 'NOT'])
+        if gate_type == 'NOT':
+            input1 = random.randint(0, 2)
+            input2 = None
+        else:
+            input1 = random.randint(0, 2)
+            input2 = random.randint(0, 3)
+        circuit.append((gate_type, input1, input2))
+    return circuit
+
+def evaluate_circuit(circuit, inputs):
+    # Evaluate the output of the circuit given the inputs.
+    outputs = [None] * len(inputs[0])
+    for i, inp in enumerate(inputs):
+        temp_outputs = [inp]
+        for gate in circuit:
+            if gate[0] == 'AND':
+                temp_outputs.append(temp_outputs[gate[1]] and temp_outputs[gate[2]])
+            elif gate[0] == 'OR':
+                temp_outputs.append(temp_outputs[gate[1]] and temp_outputs[gate[2]])
+            elif gate[0] == 'NOT':
+                temp_outputs.append(not temp_outputs[gate[1]])
+        outputs[i] = temp_outputs[-1]
+    return outputs
+
+def optimize_circuit(truth_table, max_gates=10):
+    best_circuit = None
+    best_score = float('inf')
+    for _ in range(10000):  # Number of iterations
+        circuit = generate_circuit(random.randint(1, max_gates))
+        score = sum([a!= b for a, b in zip(evaluate_circuit(circuit, [[x] for x in truth_table]), truth_table)])
+        if score < best_score:
+            best_circuit = circuit
+            best_score = score
+    return best_circuit
+
+```python
+{}
+```

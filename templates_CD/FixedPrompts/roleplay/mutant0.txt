@@ -1,0 +1,46 @@
+python
+import numpy as np
+
+def generate_circuit(gates):
+    # Generate a random initial population of 1000 candidate circuits
+    population = [np.random.randint(2, size=(len(gates),)) for _ in range(1000)]
+
+    # Define the fitness function
+    def fitness(individual):
+        # Evaluate the individual against the target truth table
+        return -sum(abs(np.array(individual) - np.array([1, 0, 1, 0])))
+
+    # Evolve the population over 100 generations
+    for generation in range(100):
+        # Select parents via tournament selection (k=3)
+        parents = []
+        for _ in range(len(population)):
+            tournament = np.random.choice(population, size=3, replace=False)
+            winner = max(tournament, key=fitness)
+            parents.append(winner)
+
+        # Perform crossover (single-point) and mutation (bit-flip)
+        offspring = []
+        for _ in range(len(parents)):
+            parent1, parent2 = np.random.choice(parents, size=2, replace=True)
+            crossover_point = np.random.randint(1, len(gates))
+            child = np.concatenate((parent1[:crossover_point], parent2[crossover_point:]))
+            if np.random.rand() < 0.01:
+                mutation_index = np.random.randint(len(child))
+                child[mutation_index] = 1 - child[mutation_index]
+            offspring.append(child)
+
+        # Replace least fit individuals with new offspring
+        population = sorted(population, key=fitness)
+        population[-len(offspring):] = offspring
+
+    # Return the fittest individual
+    return min(population, key=fitness)
+
+# Example usage
+gates = ['AND', 'OR', 'NOT']
+print(generate_circuit(gates))
+
+```python
+{}
+```
