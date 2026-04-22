@@ -23,6 +23,24 @@ from google import genai
 from google.genai import types
 
 
+C880_INPUT_PORTS = (
+    "N1", "N8", "N13", "N17", "N26", "N29", "N36", "N42", "N51", "N55",
+    "N59", "N68", "N72", "N73", "N74", "N75", "N80", "N85", "N86", "N87",
+    "N88", "N89", "N90", "N91", "N96", "N101", "N106", "N111", "N116", "N121",
+    "N126", "N130", "N135", "N138", "N143", "N146", "N149", "N152", "N153", "N156",
+    "N159", "N165", "N171", "N177", "N183", "N189", "N195", "N201", "N207", "N210",
+    "N219", "N228", "N237", "N246", "N255", "N259", "N260", "N261", "N267", "N268",
+)
+
+C880_OUTPUT_PORTS = (
+    "N388", "N389", "N390", "N391", "N418", "N419", "N420", "N421", "N422", "N423",
+    "N446", "N447", "N448", "N449", "N450", "N767", "N768", "N850", "N863", "N864",
+    "N865", "N866", "N874", "N878", "N879", "N880",
+)
+
+C880_PORTS = C880_INPUT_PORTS + C880_OUTPUT_PORTS
+
+
 def get_template_root():
     return globals().get("TEMPLATE_DIR", os.path.join(ROOT_DIR, "templates_AE"))
 
@@ -47,6 +65,48 @@ def _top_level_defs(code_text):
     return tree, names
 
 
+def _extract_c880_module_header(code_text):
+    match = re.search(r"module\s+c880_impl\s*\((.*?)\)\s*;", code_text, flags=re.DOTALL)
+    if not match:
+        raise ValueError("Candidate does not contain a parseable c880_impl module header.")
+    return match.group(1)
+
+
+def validate_c880_verilog_contract(code_text):
+    """
+    Enforce the exact scalar C880 DUT interface expected by evalC880.py.
+    This rejects LLM variants that replace the 60/26 named ports with bus
+    aliases like A/Y, or otherwise mutate the module contract.
+    """
+    header = _extract_c880_module_header(code_text)
+
+    if re.search(r"\b(?:input|output)\s*\[", header):
+        raise ValueError(
+            "c880_impl must keep the scalar named-port interface; bus ports are not allowed."
+        )
+
+    header_names = [
+        token for token in re.findall(r"\b[A-Za-z_]\w*\b", header)
+        if token not in {"input", "output"}
+    ]
+
+    if header_names != list(C880_PORTS):
+        missing = [name for name in C880_PORTS if name not in header_names]
+        extras = [name for name in header_names if name not in C880_PORTS]
+
+        details = []
+        if missing:
+            details.append(f"missing ports: {missing[:8]}{'...' if len(missing) > 8 else ''}")
+        if extras:
+            details.append(f"unexpected ports: {extras[:8]}{'...' if len(extras) > 8 else ''}")
+        if not details:
+            details.append("port order or direction no longer matches the required C880 interface")
+
+        raise ValueError("Invalid c880_impl port interface: " + "; ".join(details))
+
+    return True
+
+
 def validate_candidate_block(candidate_code, base_code):
     """
     Validate that a mutated block still matches the structural contract of the
@@ -63,6 +123,7 @@ def validate_candidate_block(candidate_code, base_code):
     if "generate_seed_verilog" in base_names:
         if "module c880_impl" not in candidate_code:
             raise ValueError("Candidate generate_seed_verilog block no longer contains the c880_impl module.")
+        validate_c880_verilog_contract(candidate_code)
 
         # The mutation target for C880 should remain a pure definition block,
         # not an executable script that runs arbitrary code during import.
@@ -106,6 +167,7 @@ def validate_augmented_file(full_code_text):
 
     if "module c880_impl" not in full_code_text:
         raise ValueError("Full candidate file is missing the c880_impl Verilog payload.")
+    validate_c880_verilog_contract(full_code_text)
 
     return True
 

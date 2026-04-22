@@ -4,9 +4,13 @@ Rules:
 3. Do not add unrelated top-level execution, training loops, search procedures, datasets, or new entry points.
 4. If the block defines `generate_seed_verilog`, keep that exact function name and make it return the full Verilog source string.
 5. If the block defines `generate_seed_verilog`, preserve module name `c880_impl` and the exact circuit input/output interface.
-6. If the block defines `main`, keep the existing `main()` contract, including `--save_dir` handling and writing `design.v`.
-7. Do not replace circuit-generation code with a different algorithmic workflow such as a new genetic algorithm, optimizer, or simulator.
-8. Exclude setup/demonstration code and assume default project imports/environment remain unchanged.
-9. Return a single fenced Python code block containing valid executable Python only.
+6. For C880 specifically, the `module c880_impl (...)` header shown in the provided block is immutable. Copy the same scalar port names, directions, and order exactly.
+7. Never replace the named C880 ports with bus aliases or simplified ports such as `input [10:0] A`, `output [5:0] Y`, `clk`, `rst`, or any renamed/grouped interface.
+8. Only mutate the internal implementation of the Verilog body. Do not add, remove, reorder, rename, vectorize, or regroup the module ports.
+9. The evaluator instantiates `c880_impl` with named ports like `.N1(...)` through `.N880(...)`; any interface change makes the candidate invalid.
+10. If the block defines `main`, keep the existing `main()` contract, including `--save_dir` handling and writing `design.v`.
+11. Do not replace circuit-generation code with a different algorithmic workflow such as a new genetic algorithm, optimizer, or simulator.
+12. Exclude setup/demonstration code and assume default project imports/environment remain unchanged.
+13. Return a single fenced Python code block containing valid executable Python only.
 
 A: Let us think step by step

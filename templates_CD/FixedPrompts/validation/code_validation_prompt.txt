@@ -7,9 +7,12 @@ Important constraints:
 2. Preserve the same top-level function/class names and signatures already present in the block.
 3. Do not invent unrelated algorithms, training loops, datasets, or top-level executable workflows.
 4. If the block contains `generate_seed_verilog`, keep that exact function name and preserve the returned Verilog generator behavior.
-5. If the block contains `main`, keep the existing `main()` contract, including writing `design.v` under `--save_dir`.
-6. Do not add import statements.
-7. Return only one fenced Python code block.
+5. If the block contains `generate_seed_verilog`, the `module c880_impl (...)` header from the provided block is immutable. Keep the same scalar port names, directions, and order exactly as written.
+6. Do not "repair" the Verilog by replacing the named C880 ports with buses or aliases such as `A`, `Y`, `clk`, `rst`, or any regrouped interface.
+7. Only repair syntax and structural completeness; do not change the circuit contract or introduce a different algorithmic workflow.
+8. If the block contains `main`, keep the existing `main()` contract, including writing `design.v` under `--save_dir`.
+9. Do not add import statements.
+10. Return only one fenced Python code block.
 
 The current code block:
 ```python
