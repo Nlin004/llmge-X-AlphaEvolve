@@ -30,7 +30,7 @@ from os.path import join as pj
 # is found. trivial_rank = N*M*P is computed inline (not stored here).
 # =============================================================================
 MATRIX_SEARCH_CONFIGS = [
-    {'N': 2, 'M': 2, 'P': 2, 'starting_R': 7, 'min_R': 4},
+    {'N': 3, 'M': 3, 'P': 3, 'starting_R': 24, 'min_R': 22},
     # Add more sizes here, e.g.:
     # {'N': 2, 'M': 3, 'P': 2, 'starting_R': 11, 'min_R': 8},
     # {'N': 3, 'M': 2, 'P': 3, 'starting_R': 15, 'min_R': 11},
@@ -115,21 +115,21 @@ def exact_tensor_check(U, V, W, n, m, p):  # Added m, p parameters!
     # return np.array_equal(T_hat, T_true)
 
 
-# Is the tensor from (U,V,W) exactly equal to the tensor from (U_ref,V_ref,W_ref) in this basis?
-def exact_tensor_check_against_ref(U, V, W, T_ref):
-    """
-    Check if candidate (U,V,W) reproduces the same tensor as T_ref.
-    """
-    print("Reference tensor (T_ref):")
-    print(T_ref)
-    T_hat = np.einsum('ir,jr,kr->ijk', U, V, W)
-    # If everything is integral/half-integral, this can be exact equality.
-    print("Reconstructed tensor (T_hat):")
-    print(T_hat)
-    return np.array_equal(T_hat, T_ref)
-    # define “correctness” as “equivalent to the reference algorithm,” not necessarily the canonical A @ B with the chosen flattening.
+# # Is the tensor from (U,V,W) exactly equal to the tensor from (U_ref,V_ref,W_ref) in this basis?
+# def exact_tensor_check_against_ref(U, V, W, T_ref):
+#     """
+#     Check if candidate (U,V,W) reproduces the same tensor as T_ref.
+#     """
+#     print("Reference tensor (T_ref):")
+#     print(T_ref)
+#     T_hat = np.einsum('ir,jr,kr->ijk', U, V, W)
+#     # If everything is integral/half-integral, this can be exact equality.
+#     print("Reconstructed tensor (T_hat):")
+#     print(T_hat)
+#     return np.array_equal(T_hat, T_ref)
+#     # define “correctness” as “equivalent to the reference algorithm,” not necessarily the canonical A @ B with the chosen flattening.
 
-    # doing the T_ref to check -> does the candidate reconstruct the same tensor as this possibly wrong Strassen variant
+#     # doing the T_ref to check -> does the candidate reconstruct the same tensor as this possibly wrong Strassen variant
 
 def apply_decomposition_bilinear(A, B, U, V, W):
     # this actually applies the decomposition of U V W to multiply A and B, by treating U V W as defining a bilinear algorithm for matrix multiplication. 
@@ -190,62 +190,29 @@ def basis_verification_cleaned(U, V, W, n, m, p):
     return counter/total_tests
 
 
-def apply_reference(A, B, U_ref, V_ref, W_ref):
-    return apply_decomposition_bilinear(A, B, U_ref, V_ref, W_ref)
-def basis_verification_vs_ref(U, V, W, U_ref, V_ref, W_ref, n):
-    total = n*n*n*n
-    counter = 0
-    for i in range(n):
-        for j in range(n):
-            A = np.zeros((n,n), dtype=int)
-            A[i,j] = 1
-            for k in range(n):
-                for l in range(n):
-                    B = np.zeros((n,n), dtype=int)
-                    B[k,l] = 1
-                    C_expected = apply_reference(A,B,U_ref,V_ref,W_ref)
-                    C_actual   = apply_decomposition_bilinear(A,B,U,V,W)
-                    if np.array_equal(C_actual, C_expected):
-                        counter += 1
-    return counter / total
+# def apply_reference(A, B, U_ref, V_ref, W_ref):
+#     return apply_decomposition_bilinear(A, B, U_ref, V_ref, W_ref)
+# def basis_verification_vs_ref(U, V, W, U_ref, V_ref, W_ref, n):
+#     total = n*n*n*n
+#     counter = 0
+#     for i in range(n):
+#         for j in range(n):
+#             A = np.zeros((n,n), dtype=int)
+#             A[i,j] = 1
+#             for k in range(n):
+#                 for l in range(n):
+#                     B = np.zeros((n,n), dtype=int)
+#                     B[k,l] = 1
+#                     C_expected = apply_reference(A,B,U_ref,V_ref,W_ref)
+#                     C_actual   = apply_decomposition_bilinear(A,B,U,V,W)
+#                     if np.array_equal(C_actual, C_expected):
+#                         counter += 1
+#     return counter / total
 
 
 
 # ============ RANDOM MATRIX TESTS =============
-def random_matrix_verification_vs_ref(U, V, W, U_ref, V_ref, W_ref,
-                                      n, num_tests=50, seed=0):
-    rng = np.random.default_rng(seed)
-    counter = 0
-    for _ in range(num_tests):
-        A = rng.integers(-3, 4, size=(n,n), dtype=int)
-        B = rng.integers(-3, 4, size=(n,n), dtype=int)
-        C_expected = apply_reference(A,B,U_ref,V_ref,W_ref)
-        C_actual   = apply_decomposition_bilinear(A,B,U,V,W)
-        if np.array_equal(C_actual, C_expected):
-            counter += 1
-    return counter / num_tests
 
-# def random_matrix_verification(U, V, W, n, m, p, num_tests=50, seed=0):
-#     rng = np.random.default_rng(seed)
-#     print("**** RANDOM MATRIX TESTS ****")
-#     counter = 0
-#     for _ in range(num_tests):
-#         A = rng.integers(-3, 4, size=(n, m), dtype=np.int64)
-#         B = rng.integers(-3, 4, size=(m, p), dtype=np.int64)
-
-#         C_expected = A @ B
-#         C_actual = apply_decomposition_bilinear(A, B, U, V, W)
-
-#         # print("C_expected:\n", C_expected)
-#         # print("C_actual:\n", C_actual)
-#         # print("-"*20)
-
-#         if np.array_equal(C_actual, C_expected):
-#             counter += 1
-#     print(f"Random matrix verification score: {counter}/{num_tests} tests correct.")
-#     return counter/num_tests # float
-
-# random matrix verification with timing and median for comparisons to other correct algos.
 def random_matrix_verification(U, V, W, n, m, p, num_tests=50, seed=0, repeats=200):
     rng = np.random.default_rng(seed)
     print("**** RANDOM MATRIX TESTS ****")
@@ -503,8 +470,8 @@ if __name__ == '__main__':
                 # Always keep the most recent real metrics as fallback
                 best_attempt_fitness_tuple = fitness_tuple
 
-                _, _, basis_score, random_score, _, _ = fitness_tuple
-                is_valid = (basis_score == 1.0 and random_score == 1.0)
+                fundamental_check, _, basis_score, random_score, _, _ = fitness_tuple
+                is_valid = (fundamental_check == 0.0 and basis_score == 1.0 and random_score == 1.0)
 
                 if is_valid:
                     print(f"  [R={R}] VALID (basis={basis_score:.4f}, "
