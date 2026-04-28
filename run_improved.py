@@ -57,6 +57,35 @@ def build_eval_command(gene_id, train_file=f'{TRAIN_FILE}'):
         "--variant_dir", VARIANT_DIR,
     ]
 
+def _is_finite_fitness(fitness):
+    if fitness is None:
+        return False
+    try:
+        return all(np.isfinite(float(value)) for value in fitness)
+    except (TypeError, ValueError):
+        return False
+
+def _prompt_templates_for_parent(template_root, parent_gene_id=None):
+    targeted_root = os.path.join(template_root, 'FixedPrompts', 'c880_targeted')
+    all_templates = glob.glob(os.path.join(template_root, 'FixedPrompts', '*', '*.txt'))
+    targeted_templates = glob.glob(os.path.join(targeted_root, '*.txt'))
+
+    if not targeted_templates:
+        return all_templates
+
+    parent_fitness = GLOBAL_DATA.get(parent_gene_id, {}).get('fitness') if parent_gene_id else None
+    if _is_finite_fitness(parent_fitness):
+        correctness_error, area, delay = [float(value) for value in parent_fitness]
+        if correctness_error > 0.0:
+            repair_templates = glob.glob(os.path.join(targeted_root, 'correctness_*.txt'))
+            if repair_templates:
+                return repair_templates
+        optimize_templates = glob.glob(os.path.join(targeted_root, 'optimize_*.txt'))
+        if optimize_templates:
+            return optimize_templates
+
+    return targeted_templates or all_templates
+
 def print_ancestry(data):
     for gene in data.keys():
         print(f'gene: {gene}')
@@ -104,7 +133,7 @@ def update_ancestry(gene_id_child, gene_id_parent, ancestry, mutation_type=None,
         ancestry[gene_id_child]['MUTATE_TYPE'] = copy.deepcopy(ancestry[gene_id_parent]['MUTATE_TYPE']) + ["CrossOver"]
     return ancestry
 
-def generate_template(PROB_EOT, GEN_COUNT, TOP_N_GENES, SOTA_ROOT, SEED_NETWORK, ROOT_DIR):
+def generate_template(PROB_EOT, GEN_COUNT, TOP_N_GENES, SOTA_ROOT, SEED_NETWORK, ROOT_DIR, parent_gene_id=None):
     """
     Generates a template based on given probabilities and gene information.
     Parameters
@@ -147,7 +176,7 @@ def generate_template(PROB_EOT, GEN_COUNT, TOP_N_GENES, SOTA_ROOT, SEED_NETWORK,
         mute_type = "EoT"
     else:
         print("\t‣ FixedPrompts")
-        prompt_templates = glob.glob(os.path.join(template_root, 'FixedPrompts', '*', '*.txt'))
+        prompt_templates = _prompt_templates_for_parent(template_root, parent_gene_id)
         template_path = np.random.choice(prompt_templates)
         mute_type = os.path.basename(template_path).split('.')[0]  # Assuming the file extension needs to be removed
         with open(template_path, 'r') as file:
@@ -178,8 +207,9 @@ def write_bash_script(input_filename_x=f'{SOTA_ROOT}/{SEED_NETWORK}',
     gene_id_child = fetch_gene(output_filename)
     template_file = None
     if python_file=='src/llm_mutation.py':
-        template_txt, mute_type = generate_template(PROB_EOT, GEN_COUNT, TOP_N_GENES, 
-                                                    SOTA_ROOT, SEED_NETWORK, ROOT_DIR)
+        template_txt, mute_type = generate_template(PROB_EOT, GEN_COUNT, TOP_N_GENES,
+                                                    SOTA_ROOT, SEED_NETWORK, ROOT_DIR,
+                                                    parent_gene_id=gene_id_parent)
         if GEN_COUNT >= 0: # this does not need to happen at creation of population
             GLOBAL_DATA_ANCESTRY = update_ancestry(gene_id_child, gene_id_parent, GLOBAL_DATA_ANCESTRY, 
                                                     mutation_type=mute_type, gene_id_parent2=None)

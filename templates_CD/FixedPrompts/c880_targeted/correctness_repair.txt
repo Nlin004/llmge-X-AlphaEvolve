@@ -1,0 +1,17 @@
+Context: You are repairing a C880 Boolean circuit candidate. The parent candidate compiled but did not match the reference truth table on every output bit.
+
+Goal: Make a conservative, localized change that improves functional correctness first. Preserve working structure where possible; do not rewrite the whole generator unless the current block is clearly malformed.
+
+The current code block:
+```python
+{}
+```
+
+Repair guidance:
+- Keep the exact `c880_impl` scalar port interface unchanged.
+- Change only the internal Verilog implementation returned by `generate_seed_verilog`.
+- Prefer restoring missing intermediate dependencies, fixing inverted polarity, and correcting output assignments.
+- Do not introduce buses, clocks, resets, arrays of ports, behavioral testbenches, random search, or external tooling.
+- It is better to improve several wrong outputs than to minimize gate count before correctness is near zero.
+
+Return: ONLY the full updated code block in markdown format. Start with ```python and end with ```.

@@ -1,0 +1,17 @@
+Context: You are optimizing a C880 Boolean circuit candidate that is already close to, or fully matching, the reference truth table.
+
+Goal: Reduce gate count and critical-path depth while preserving exact functional behavior.
+
+The current code block:
+```python
+{}
+```
+
+Optimization guidance:
+- Keep the exact `c880_impl` scalar port interface unchanged.
+- Mutate only the internal combinational logic returned by `generate_seed_verilog`.
+- Look for repeated subexpressions, redundant inversions, duplicated assigns, De Morgan simplifications, shared carry/control logic, and output aliases.
+- Prefer small equivalence-preserving refactors over broad rewrites.
+- Do not remove an intermediate signal unless all dependent outputs remain equivalent.
+
+Return: ONLY the full updated code block in markdown format. Start with ```python and end with ```.

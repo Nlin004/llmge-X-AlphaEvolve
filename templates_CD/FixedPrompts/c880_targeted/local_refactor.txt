@@ -1,0 +1,17 @@
+Context: You are generating a C880 circuit variant for evolutionary search.
+
+Goal: Produce a specific local variation, not a full redesign. Change one coherent part of the Boolean network so the evaluator can measure whether that localized edit helps.
+
+The current code block:
+```python
+{}
+```
+
+Variation guidance:
+- Keep the exact `c880_impl` scalar port interface unchanged.
+- Mutate only one cluster of related assigns, such as one output cone or one repeated control subexpression.
+- Preserve most existing signal names and assignments.
+- If uncertain, make a correctness-preserving simplification rather than a speculative rewrite.
+- Do not introduce buses, clocks, resets, procedural always blocks, external modules, or unrelated Python logic.
+
+Return: ONLY the full updated code block in markdown format. Start with ```python and end with ```.

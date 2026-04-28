@@ -8,6 +8,8 @@ from pathlib import Path as p
 from os.path import join as pj
 
 REF_V = p(__file__).parent / "c880.v"
+TOTAL_TEST_VECTORS = 502
+TOTAL_OUTPUT_BITS = TOTAL_TEST_VECTORS * 26
 
 def write_testbench(run_dir):
     """Golden-model testbench: drives both c880 (reference) and c880_impl (DUT),
@@ -40,7 +42,7 @@ module tb;
                            d446,d447,d448,d449,d450,d767,d768,d850,
                            d863,d864,d865,d866,d874,d878,d879,d880};
 
-    integer i, errors;
+    integer i, j, vector_errors, bit_errors;
     reg [31:0] rnd1, rnd2;
 
     // Reference (golden model)
@@ -84,7 +86,8 @@ module tb;
     );
 
     initial begin
-        errors = 0;
+        vector_errors = 0;
+        bit_errors = 0;
 
         // Corner case: all zeros
         {N268,N267,N261,N260,N259,N255,N246,N237,N228,N219,N210,N207,
@@ -92,7 +95,12 @@ module tb;
          N146,N143,N138,N135,N130,N126,N121,N116} = 32'h0;
         {N111,N106,N101,N96,N91,N90,N89,N88,N87,N86,N85,N80,N75,N74,
          N73,N72,N68,N59,N55,N51,N42,N36,N29,N26,N17,N13,N8,N1} = 32'h0;
-        #10; if (ref_out !== dut_out) errors = errors + 1;
+        #10;
+        if (ref_out !== dut_out) begin
+            vector_errors = vector_errors + 1;
+            for (j = 0; j < 26; j = j + 1)
+                if (ref_out[j] !== dut_out[j]) bit_errors = bit_errors + 1;
+        end
 
         // Corner case: all ones
         {N268,N267,N261,N260,N259,N255,N246,N237,N228,N219,N210,N207,
@@ -100,7 +108,12 @@ module tb;
          N146,N143,N138,N135,N130,N126,N121,N116} = 32'hFFFFFFFF;
         {N111,N106,N101,N96,N91,N90,N89,N88,N87,N86,N85,N80,N75,N74,
          N73,N72,N68,N59,N55,N51,N42,N36,N29,N26,N17,N13,N8,N1} = 32'hFFFFFFFF;
-        #10; if (ref_out !== dut_out) errors = errors + 1;
+        #10;
+        if (ref_out !== dut_out) begin
+            vector_errors = vector_errors + 1;
+            for (j = 0; j < 26; j = j + 1)
+                if (ref_out[j] !== dut_out[j]) bit_errors = bit_errors + 1;
+        end
 
         // 500 random vectors
         for (i = 0; i < 500; i = i + 1) begin
@@ -111,16 +124,22 @@ module tb;
             {N111,N106,N101,N96,N91,N90,N89,N88,N87,N86,N85,N80,N75,N74,
              N73,N72,N68,N59,N55,N51,N42,N36,N29,N26,N17,N13,N8,N1} = rnd2;
             #10;
-            if (ref_out !== dut_out) errors = errors + 1;
+            if (ref_out !== dut_out) begin
+                vector_errors = vector_errors + 1;
+                for (j = 0; j < 26; j = j + 1)
+                    if (ref_out[j] !== dut_out[j]) bit_errors = bit_errors + 1;
+            end
         end
 
-        if (errors == 0) $display("RESULT: PASS");
-        else $display("RESULT: FAIL (%d errors)", errors);
+        if (vector_errors == 0) $display("RESULT: PASS");
+        else $display("RESULT: FAIL (%0d vector errors, %0d bit errors)", vector_errors, bit_errors);
+        $display("BIT_ERRORS: %0d / %0d", bit_errors, __TOTAL_OUTPUT_BITS__);
         $finish;
     end
 endmodule
 """
     tb_path = pj(run_dir, "tb.v")
+    tb_code = tb_code.replace("__TOTAL_OUTPUT_BITS__", str(TOTAL_OUTPUT_BITS))
     with open(tb_path, "w") as f:
         f.write(tb_code.strip())
     return tb_path
@@ -183,12 +202,19 @@ def main():
         )
         res = subprocess.check_output(["vvp", sim_out]).decode()
 
-        if "RESULT: PASS" in res:
-            fitness_correctness = 0.0
+        bit_error_match = re.search(r"BIT_ERRORS:\s*(\d+)\s*/\s*(\d+)", res)
+        if bit_error_match:
+            bit_errors = int(bit_error_match.group(1))
+            total_bits = int(bit_error_match.group(2))
+            fitness_correctness = bit_errors / total_bits if total_bits else 1.0
             area, delay = estimate_ppa(design_file)
+        if "RESULT: PASS" in res:
             print(f"[SUCCESS] Correct logic! Area: {area}, Delay: {delay}")
         else:
-            print(f"[FAILED] Logic mismatch vs reference.\n{res}")
+            print(
+                "[FAILED] Logic mismatch vs reference. "
+                f"Correctness error rate: {fitness_correctness:.6f}. Area: {area}, Delay: {delay}\n{res}"
+            )
 
     except FileNotFoundError as e:
         print(f"[SYNTAX ERROR] Required Verilog tool not found:\n{e}")
@@ -196,7 +222,7 @@ def main():
         print(f"[SYNTAX ERROR] iverilog failed:\n{e.output.decode()}")
 
     # 4. Write multi-objective fitness (correctness, area, delay)
-    results_text = f"{fitness_correctness:.1f}, {area}, {delay}"
+    results_text = f"{fitness_correctness:.6f}, {area}, {delay}"
 
     res_file = (p(__file__).parent / 'results' / f'{gene_id}_results.txt').resolve()
     res_file.parent.mkdir(parents=True, exist_ok=True)
