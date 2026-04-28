@@ -171,6 +171,14 @@ def validate_augmented_file(full_code_text):
 
     return True
 
+def is_valid_python(code_text):
+    """Return True when a candidate can at least be imported by Python."""
+    try:
+        ast.parse(code_text)
+    except SyntaxError:
+        return False
+    return True
+
 def clean_code_from_llm(code_from_llm):
     """Cleans the code received from LLM."""
     if not code_from_llm:
@@ -214,7 +222,8 @@ def clean_code_from_llm(code_from_llm):
 
     raise ValueError("LLM response did not include a recognizable code block.")
 
-def generate_augmented_code(txt2llm, augment_idx, apply_quality_control, top_p, temperature, inference_submission=False):
+def generate_augmented_code(txt2llm, augment_idx, apply_quality_control, top_p, temperature,
+                            inference_submission=False, allow_invalid_candidate=False):
     """Generates augmented code using Mixtral."""
 
     box_print("PROMPT TO LLM", print_bbox_len=60, new_line_end=False)
@@ -237,6 +246,8 @@ def generate_augmented_code(txt2llm, augment_idx, apply_quality_control, top_p, 
         
     base_code = retrieve_base_code(augment_idx)
     retries = 0
+    fallback_code = None
+    fallback_error = None
     while retries < 3:
         if apply_quality_control:
             code_from_llm, generate_text = llm_code_generator(txt2llm, return_gen=True, top_p=top_p, temperature=temperature)
@@ -253,8 +264,11 @@ def generate_augmented_code(txt2llm, augment_idx, apply_quality_control, top_p, 
 
         try:
             cleaned_code = clean_code_from_llm(code_from_llm)
+            if is_valid_python(cleaned_code):
+                fallback_code = cleaned_code
             validate_candidate_block(cleaned_code, base_code)
         except ValueError as exc:
+            fallback_error = exc
             retries += 1
             print(f"Response Invalid: {exc}")
             continue
@@ -263,6 +277,14 @@ def generate_augmented_code(txt2llm, augment_idx, apply_quality_control, top_p, 
         box_print("CODE FROM LLM", print_bbox_len=60, new_line_end=False)
         print(cleaned_code)
         return cleaned_code
+
+    if allow_invalid_candidate and fallback_code is not None:
+        print(
+            "Returning syntactically valid candidate despite validation failure "
+            f"so the evaluator can assign partial/worst-case fitness: {fallback_error}",
+            flush=True,
+        )
+        return fallback_code
 
     raise RuntimeError("Failed to get a valid response from the LLM after 3 retries.")
 

@@ -385,6 +385,26 @@ def check4job_completion(job_id, local_output=None, check_interval=60, timeout=1
         time.sleep(check_interval)
         print(f'\t‣ Waiting on check4job_completion LLM job: {job_id} Time: {round(time.time() - start_time)}s', flush=True)
         
+def generated_model_exists(gene_id):
+    return os.path.isfile(f'{VARIANT_DIR}/{MODEL}_{gene_id}.py')
+
+def generation_usable(gene_id, job_done):
+    """
+    A generation job can print validation/traceback errors but still leave a
+    candidate model file. Keep that candidate and let evalC880 assign graded
+    correctness fitness instead of discarding it at generation time.
+    """
+    if job_done:
+        return True
+    if generated_model_exists(gene_id):
+        print(
+            f'\t‣ Generation reported errors for {gene_id}, but model file exists; '
+            'sending it to evaluation for fitness scoring.',
+            flush=True,
+        )
+        return True
+    return False
+
 def generate_random_string(length=20):
     # Define the characters that can be used in the string
     characters = string.ascii_letters + string.digits
@@ -425,7 +445,10 @@ def create_individual(container, temp_min=0.05, temp_max=0.4):
         else:
             print(f'Checking completion for {gene_id}', flush=True)
         job_done = check4job_completion(job_id=job_id, local_output=local_output)
-        print(f'Model Files for {gene_id} are Loaded') if job_done else print(f'Error Loading Model Files for {gene_id}', flush=True)
+        if generation_usable(gene_id, job_done):
+            print(f'Model Files for {gene_id} are Loaded')
+        else:
+            print(f'Error Loading Model Files for {gene_id}', flush=True)
     return individual
 
 def submit_run(gene_id):
@@ -683,13 +706,14 @@ def delayed_mate_check(offspring):
                 print(f'Delayed Mating Check: {new_gene_id}, LLM Job ID: {job_id}')
                 print(f'\t‣ Checking for Crossover Job Completion: {job_id} for {new_gene_id}')
                 job_done = check4job_completion(job_id)
+                usable_generation = generation_usable(new_gene_id, job_done)
 
-                if job_done:
+                if usable_generation:
                     print(f'\t‣ Model Files for {new_gene_id} are Loaded', flush=True) 
                 else: 
                     print(f'\t‣ Error Loading Model Files for {new_gene_id}!!', flush=True)
 
-                failed_process = not (successful_sub_flag and job_done)
+                failed_process = not (successful_sub_flag and usable_generation)
                 if failed_process:
                     new_gene_id = LINKED_GENES[k]
                     old_gene_id = k
@@ -713,6 +737,7 @@ def delayed_creation_check(offspring):
                     job_id = GLOBAL_DATA[k]["job_id"]
                     print(f'Checking for Job Completion: {job_id} for {gene_id}', flush=True)
                     job_done = check4job_completion(job_id)
+                    generation_usable(gene_id, job_done)
                   
     return offspring
 
@@ -742,12 +767,13 @@ def delayed_mutate_check(offspring):
                     print(f'Delayed Mutation Check: {new_gene_id}, LLM Job ID: {job_id}', flush=True)
                     print(f'\t‣ Checking for Creation Job Completion: {job_id} for {new_gene_id}')
                     job_done = check4job_completion(job_id)
-                    if job_done:
+                    usable_generation = generation_usable(new_gene_id, job_done)
+                    if usable_generation:
                         print(f'\t‣ Model Files for {new_gene_id} are Loaded') 
                     else: 
                         print(f'\t☠ Error Loading Model Files for {new_gene_id}')
 
-                    failed_process = not (successful_sub_flag and job_done)
+                    failed_process = not (successful_sub_flag and usable_generation)
                     old_gene_id = LINKED_GENES[k]
                     individual = update_individual(individual, new_gene_id, old_gene_id=old_gene_id,
                                                    process_success=not failed_process, process_type='Mutation')
@@ -790,16 +816,18 @@ def customCrossover(ind1, ind2):
         if DELAYED_CHECK:
             GLOBAL_DATA[new_gene_id]['status'] = 'DELAYED_CHECK'
             return new_gene_id, None
-        
+
+        usable_generation = False
         if successful_sub_flag:
             print(f'\t‣ Checking for Crossover Job Completion: {job_id} for {new_gene_id}')
             job_done = check4job_completion(job_id, local_output)
-            if job_done:
+            usable_generation = generation_usable(new_gene_id, job_done)
+            if usable_generation:
                 print(f'\t‣ Model Files for {new_gene_id} are Loaded')
             else: 
                 print(f'\t‣ Error Loading Model Files for {new_gene_id}!!')
 
-        failed_process = True if (successful_sub_flag is False) or (job_done is False) else False
+        failed_process = True if (successful_sub_flag is False) or (usable_generation is False) else False
         # Return the new gene ID
         return new_gene_id, failed_process
     
@@ -872,12 +900,14 @@ def customMutation(individual, indpb, temp_min=0.02, temp_max=0.35):
     if successful_sub_flag:
         print(f'\t‣ Checking for Mutation Job Completion: {job_id} for {new_gene_id}')
         job_done = check4job_completion(job_id, local_output)
-        if job_done:
+        usable_generation = generation_usable(new_gene_id, job_done)
+        if usable_generation:
             print(f'\t‣ Model Files for {new_gene_id} are Loaded')
         else: 
             print(f'\t☠ Error Loading Model Files for {new_gene_id}')
     
-    failed_process = not (successful_sub_flag and job_done)
+    usable_generation = locals().get("usable_generation", False)
+    failed_process = not (successful_sub_flag and usable_generation)
 
     individual = update_individual(individual, new_gene_id, old_gene_id,
                                    process_success=(not failed_process), process_type='Mutation')

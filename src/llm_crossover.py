@@ -36,8 +36,15 @@ def augment_network(input_filename_x, input_filename_y, output_filename,
     # Add code to be augmented
     txt2llm = template_txt.format(x.strip(), y.strip())
     # Generate augmented code
-    code_from_llm = generate_augmented_code(txt2llm, augment_idx, apply_quality_control,
-                                            top_p, temperature, inference_submission=inference_submission)
+    code_from_llm = generate_augmented_code(
+        txt2llm,
+        augment_idx,
+        apply_quality_control,
+        top_p,
+        temperature,
+        inference_submission=inference_submission,
+        allow_invalid_candidate=True,
+    )
     # Insert note if present
     temp_txt = parts_x[augment_idx]
     note_txt = extract_note(temp_txt)

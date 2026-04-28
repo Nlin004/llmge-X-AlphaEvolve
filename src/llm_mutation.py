@@ -8,10 +8,10 @@ from cfg.constants import *
 from utils.print_utils import box_print
 from pathlib import Path
 
-from llm_utils import (split_file, submit_mixtral, submit_mixtral_hf, 
+from llm_utils import (split_file, submit_mixtral, submit_mixtral_hf,
                        llm_code_qc, str2bool, generate_augmented_code, 
                        extract_note, clean_code_from_llm, retrieve_base_code,
-                       validate_augmented_file)
+                       validate_augmented_file, is_valid_python)
 
 def augment_network(input_filename='network.py', output_filename='network_x.py', template_txt=None,
                     top_p=0.15, temperature=0.1, apply_quality_control=False, inference_submission=False):
@@ -29,14 +29,30 @@ def augment_network(input_filename='network.py', output_filename='network_x.py',
         template_txt = file.read()
     # add code to be augmented 
     txt2llm = template_txt.format(code2llm.strip())
-    code_from_llm = generate_augmented_code(txt2llm, augment_idx-1, apply_quality_control,
-                                            top_p, temperature, inference_submission=inference_submission)
+    code_from_llm = generate_augmented_code(
+        txt2llm,
+        augment_idx-1,
+        apply_quality_control,
+        top_p,
+        temperature,
+        inference_submission=inference_submission,
+        allow_invalid_candidate=True,
+    )
     note_txt = extract_note(code2llm)
     parts[augment_idx] = f"\n{note_txt}{code_from_llm}\n"
     # prompt_log = f'# Parent Prompt: {template_path} Root Code: {input_filename}\n'
     # python_network_txt = prompt_log + '# --OPTION--'.join(parts)
     python_network_txt = '# --OPTION--'.join(parts)
-    validate_augmented_file(python_network_txt)
+    try:
+        validate_augmented_file(python_network_txt)
+    except ValueError as exc:
+        if not is_valid_python(python_network_txt):
+            raise
+        print(
+            "WARNING: Candidate failed strict C880 validation but is valid Python; "
+            f"writing it so evalC880 can assign fitness. Reason: {exc}",
+            flush=True,
+        )
     # Write the text to the file
     output_file = Path(output_filename)
     output_file.parent.mkdir(exist_ok=True, parents=True)
