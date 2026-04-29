@@ -12,7 +12,12 @@ app = FastAPI(title="LLM API", version="1.0")
 
 BATCH_SIZE = int(os.getenv("LLM_BATCH_SIZE", "1"))  # num of LLM requests to process at once
 BATCH_WAIT_TIME = 2  # max wait time for batch to fill in s
-MAX_SERVER_NEW_TOKENS = int(os.getenv("MAX_SERVER_NEW_TOKENS", "512"))
+MAX_SERVER_NEW_TOKENS = int(os.getenv("MAX_SERVER_NEW_TOKENS", "256"))
+print(
+    f"LLM server config: BATCH_SIZE={BATCH_SIZE}, "
+    f"MAX_SERVER_NEW_TOKENS={MAX_SERVER_NEW_TOKENS}",
+    flush=True,
+)
 
 class LLMRequest(BaseModel):
     prompt: str

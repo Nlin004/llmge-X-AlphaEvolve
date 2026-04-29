@@ -13,13 +13,21 @@ from llm_utils import (split_file, submit_mixtral, submit_mixtral_hf,
                        extract_note, clean_code_from_llm, retrieve_base_code,
                        validate_augmented_file, is_valid_python)
 
+
+def select_augment_idx(parts):
+    """Prefer the C880 Verilog generator block instead of mutating glue code."""
+    for idx in range(1, len(parts)):
+        if "def generate_seed_verilog" in parts[idx] and "module c880_impl" in parts[idx]:
+            return idx
+    return np.random.randint(1, len(parts))
+
 def augment_network(input_filename='network.py', output_filename='network_x.py', template_txt=None,
                     top_p=0.15, temperature=0.1, apply_quality_control=False, inference_submission=False):
     
     print(f'Loading {input_filename} code')
     parts = split_file(input_filename)
-    augment_idx = np.random.randint(1, len(parts))
-    # select code to be augmented randomly 
+    augment_idx = select_augment_idx(parts)
+    # Select code to be augmented. C880 should mutate the Verilog body, not main().
     code2llm = parts[augment_idx]
     # prompt_templates = glob.glob(f'{ROOT_DIR}/templates/FixedPrompts/*/*.txt')
     # template_path = np.random.choice(prompt_templates)

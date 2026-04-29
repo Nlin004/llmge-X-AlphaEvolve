@@ -15,6 +15,9 @@ module load uv
 
 # Make sure CUDA can see all GPUs
 export CUDA_VISIBLE_DEVICES=0,1
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+export LLM_BATCH_SIZE=1
+export MAX_SERVER_NEW_TOKENS=256
 
 export SERVER_HOSTNAME=$(hostname)
 
