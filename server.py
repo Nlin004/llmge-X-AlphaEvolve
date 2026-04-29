@@ -1,4 +1,5 @@
 import time
+import os
 import torch
 import transformers
 from fastapi import FastAPI, HTTPException
@@ -9,8 +10,9 @@ from src.cfg.constants import *
 
 app = FastAPI(title="LLM API", version="1.0")
 
-BATCH_SIZE = 8  # num of LLM requests to process at once
+BATCH_SIZE = int(os.getenv("LLM_BATCH_SIZE", "1"))  # num of LLM requests to process at once
 BATCH_WAIT_TIME = 2  # max wait time for batch to fill in s
+MAX_SERVER_NEW_TOKENS = int(os.getenv("MAX_SERVER_NEW_TOKENS", "512"))
 
 class LLMRequest(BaseModel):
     prompt: str
@@ -62,7 +64,7 @@ class LLMModel:
             temperature=0.1,
             top_p=0.15,
             top_k=0,
-            max_new_tokens=1648,
+            max_new_tokens=MAX_SERVER_NEW_TOKENS,
             repetition_penalty=1.1,
             do_sample=True,
             batch_size=BATCH_SIZE # for batch support
@@ -113,7 +115,10 @@ class LLMModel:
                     
                     prompts = [req["prompt"] for req in batch]
                     
-                    max_new_tokens = max(req["max_new_tokens"] for req in batch)
+                    max_new_tokens = min(
+                        max(req["max_new_tokens"] for req in batch),
+                        MAX_SERVER_NEW_TOKENS,
+                    )
                     
                     # all temps and top_p are same
                     temperature = batch[0]["temperature"] 
@@ -127,6 +132,8 @@ class LLMModel:
                         temperature=temperature,
                         top_p=top_p
                     )
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
                     
                     response_time = round(time.time() - start_time, 2)
                     

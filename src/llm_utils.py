@@ -250,7 +250,20 @@ def generate_augmented_code(txt2llm, augment_idx, apply_quality_control, top_p, 
     fallback_error = None
     while retries < 3:
         if apply_quality_control:
-            code_from_llm, generate_text = llm_code_generator(txt2llm, return_gen=True, top_p=top_p, temperature=temperature)
+            llm_result = llm_code_generator(txt2llm, return_gen=True, top_p=top_p, temperature=temperature)
+            if not llm_result:
+                retries += 1
+                print("Response Invalid: LLM server returned no output")
+                time.sleep(5)
+                continue
+
+            code_from_llm, generate_text = llm_result
+            if not code_from_llm:
+                retries += 1
+                print("Response Invalid: LLM server returned empty text")
+                time.sleep(5)
+                continue
+
             code_from_llm = qc_func(code_from_llm, base_code, generate_text)
         else:
             code_from_llm = llm_code_generator(txt2llm, top_p=top_p, temperature=temperature)
@@ -259,7 +272,8 @@ def generate_augmented_code(txt2llm, augment_idx, apply_quality_control, top_p, 
 
         if not code_from_llm :
             retries += 1
-            print("Response Invalid")
+            print("Response Invalid: LLM server returned no output")
+            time.sleep(5)
             continue
 
         try:
@@ -329,7 +343,7 @@ def llm_code_qc(code_from_llm, base_code, generate_text):
     if generate_text is None:
         code_from_llm = submit_mixtral_local(
             prompt2llm,
-            max_new_tokens=1500,
+            max_new_tokens=512,
             top_p=0.1,
             temperature=0.1,
             return_gen=False,
@@ -353,8 +367,8 @@ def llm_code_qc_hf(code_from_llm, base_code, generate_text=None):
     box_print("QC PROMPT TO LLM", print_bbox_len=120, new_line_end=False)
     print(prompt2llm)
     
-    code_from_llm = submit_mixtral_local(prompt2llm, max_new_tokens=1500, top_p=0.1, temperature=0.1, 
-                      model_id="mistralai/Mixtral-8x7B-v0.1", return_gen=False)
+    code_from_llm = submit_mixtral_local(prompt2llm, max_new_tokens=512, top_p=0.1, temperature=0.1,
+                      return_gen=False)
     box_print("TEXT FROM LLM", print_bbox_len=60, new_line_end=False)
     print(code_from_llm)
     code_from_llm = clean_code_from_llm(code_from_llm)
@@ -453,7 +467,7 @@ def get_llm_server_hostname():
         hostname = f.readline().strip() 
     return hostname
 
-def submit_mixtral_local(prompt, max_new_tokens=850, temperature=0.2, top_p=0.15, server_url=f"http://{os.getenv('SERVER_HOSTNAME', 'localhost')}:{PORT}/generate", return_gen=False):
+def submit_mixtral_local(prompt, max_new_tokens=512, temperature=0.2, top_p=0.15, server_url=f"http://{os.getenv('SERVER_HOSTNAME', 'localhost')}:{PORT}/generate", return_gen=False):
     
     payload = {
         "prompt": prompt,
@@ -488,7 +502,7 @@ def submit_mixtral_local(prompt, max_new_tokens=850, temperature=0.2, top_p=0.15
         print(f"Request failed: {e}")
         return None
 
-def submit_deepseek_local(prompt, max_new_tokens=850, temperature=0.2, top_p=0.15, server_url=f"http://{get_llm_server_hostname()}:8000/generate", return_gen=False):
+def submit_deepseek_local(prompt, max_new_tokens=512, temperature=0.2, top_p=0.15, server_url=f"http://{get_llm_server_hostname()}:8000/generate", return_gen=False):
     payload = {
         "prompt": prompt,
         "max_new_tokens": max_new_tokens, # can change to random between 800 - 1000 if needed
