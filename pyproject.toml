@@ -28,6 +28,6 @@ dependencies = [
     "pandas>=2.3.2",
     "scikit-learn>=1.7.2",
     "imblearn",
-    "jax>=0.9.0.1",
+    "jax[cuda]>=0.9.0.1",
     "optax>=0.2.7",
 ]

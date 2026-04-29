@@ -34,8 +34,8 @@ from os.path import join as pj
 MATRIX_SEARCH_CONFIGS = [
     # {'N': 3, 'M': 3, 'P': 3, 'starting_R': 24, 'min_R': 22},
     # Add more sizes here, e.g.:
-    # {'N': 2, 'M': 3, 'P': 2, 'starting_R': 11, 'min_R': 8},
-    {'N': 2, 'M': 2, 'P': 2, 'starting_R': 7, 'min_R': 6},
+    {'N': 2, 'M': 3, 'P': 2, 'starting_R': 11, 'min_R': 8},
+    # {'N': 2, 'M': 2, 'P': 2, 'starting_R': 7, 'min_R': 6},
     # {'N': 3, 'M': 2, 'P': 3, 'starting_R': 15, 'min_R': 11},
 ]
 # Iterations and early-stop threshold passed to each model run during rank search.
@@ -324,7 +324,7 @@ def solve_W_row_for_entry(U, V, entry_idx):
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--model', type=str, default="seedModel1", help="model file")
-    parser.add_argument('--save_dir', type=str, default="trained", help="path where results (the tensor factors) will be saved after running the model")
+    parser.add_argument('--save_dir', type=str, default="factors", help="path where results (the tensor factors) will be saved after running the model")
     parser.add_argument('--random_seed', type=int, default=42, help="random seed")
     parser.add_argument('--variant_dir', type=str, default='models', help="directory where models are written by LLM-GE")
     
@@ -355,8 +355,8 @@ if __name__ == '__main__':
     except:
         gene_id = 'seed'
     
-    save_dir = f'{args.save_dir}/{gene_id}'
-    create_save_dir(save_dir)
+    # save_dir = f'{args.save_dir}/{gene_id}FAAAAAAA'
+    # create_save_dir(save_dir)
     
     # run_dir is now created per (size, rank) attempt inside the search loop below.
 

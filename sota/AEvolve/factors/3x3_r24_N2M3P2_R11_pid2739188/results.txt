@@ -1,0 +1,3 @@
+Final Loss: 0.004845853894948959
+Problem: 2x3 x 3x2
+Config: {'N': 2, 'M': 3, 'P': 2, 'R': 11, 'lr': 0.01, 'iterations': 10000, 'batch_size': 250, 'seed': 42, 'save_root': 'trained', 'save_dir': '/storage/ice1/6/9/nlin47/AlphaEvolve/llm-guided-evolution-fork/sota/AEvolve/factors/3x3_r24_N2M3P2_R11_pid2739188', 'print_every': 1000, 'early_stop_threshold': 0.0}

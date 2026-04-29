@@ -157,7 +157,7 @@ def get_args():
     parser.add_argument("--batch_size", type=int, default=OPTIMIZATION_CONFIG['batch_size'], 
                        help="number of parallel random restarts")
     parser.add_argument("--seed", type=int, default=42, help="random seed")
-    parser.add_argument("--save_root", type=str, default="factors", 
+    parser.add_argument("--save_root", type=str, default="trained", 
                        help="root directory for experiment folders")
     parser.add_argument("--save_dir", type=str, default=None, 
                        help="Explicit experiment directory (used by eval.py)")
@@ -169,198 +169,115 @@ def get_args():
     return parser.parse_args()
 
 # --OPTION--
-# =============================================================================
-# EVOLVABLE COMPONENTS (LLM CAN MODIFY THESE)
-# =============================================================================
-
 def create_loss_function(target_tensor):
     """
-    Create the loss function for optimization. IT IS CRUCIAL THAT THIS FUNCTION 
-    RETURNS A FUNCTION WITH THE SIGNATURE loss_fn(params) or loss_fn(params, disc_weight)
-    depending on your implementation choice, as this is what the optimization loop 
-    expects when it calls jax.value_and_grad(loss_fn)(params).
+    Create the loss function for optimization.
     
-    LLM EVOLUTION GUIDE:
-    You can modify this function to improve convergence and solution quality.
+    Parameters:
+        - target_tensor (jax array): Target tensor to be reconstructed.
     
-    CURRENT APPROACH:
-    - Simple MSE reconstruction loss
-    - No regularization or penalties
-    
-    EXAMPLE MODIFICATIONS (COME UP WITH YOUR OWN VARIATIONS TOO!):
-    1. Add discretization penalty to encourage half-integer solutions:
-       disc_penalty = sum((U - round(U*2)/2)^2) for U,V,W
-       
-    2. Add sparsity (L1) to encourage zeros:
-       sparsity = |U| + |V| + |W|
-       
-    3. Add integer attraction:
-       int_penalty = sum((U - round(U))^2) for U,V,W
-       
-    4. Combine multiple objectives:
-       loss = reconstruction + λ1*discretization + λ2*sparsity
-       
-    5. Use annealed penalties (start low, increase over training)
-    
-    EXAMPLES:
-    # Discretization only:
-    def half_integer_distance(x):
-        rounded = jnp.round(x * 2) / 2
-        return jnp.sum((x - rounded) ** 2)
-    disc = half_integer_distance(U) + half_integer_distance(V) + half_integer_distance(W)
-    return reconstruction_loss + 0.01 * disc
-    
-    # Sparsity + Integer:
-    sparsity = jnp.sum(jnp.abs(U)) + jnp.sum(jnp.abs(V)) + jnp.sum(jnp.abs(W))
-    int_penalty = jnp.sum((U - jnp.round(U))**2 + (V - jnp.round(V))**2 + (W - jnp.round(W))**2)
-    return reconstruction_loss + 1e-4*sparsity + 1e-3*int_penalty
+    Returns:
+        - A function with the signature loss_fn(params) that computes the loss.
     """
-    # IF YOU ARE AN LLM GIVEN A TASK TO EVOLVE THIS FUNCTION, SEE THE OTHER COMMENTED LOSS_FNs for ideas on how to modify it.
-    # Your end goal is to provide a loss function that optimizes for solution factors as close as possible to a clean integer factorization (with factors ideally in -1,0,1) that reconstructs the tensor exactly.
-    # Remember that T_hat in the existing loss function below is the reconstructed tensor from the given factors U, V, and W. 
-    # The loss is currently just the L2 norm of the difference between the target tensor and the reconstructed tensor, which encourages exact reconstruction but does not directly encourage integer or sparse factors.
-    
-    # this INTERNAL loss function is called in the step function during optimization, in a line that'll look like this:
-    #   loss, grads = jax.value_and_grad(loss_fn)(params)
-    # Ensure that whatever improved version of loss_fn you create is compatible with a call with this usage.
 
-    # LOSS FUNCTION WITHOUT DISCRETIZATION
+    # Define the loss function with integer attraction and sparsity
     def loss_fn(params):
         U, V, W = params
         # Reconstruct: sum_r (u_r (x) v_r (x) w_r)
         # Factors shape: (dim, Rank)
         T_hat = jnp.einsum('ir,jr,kr->ijk', U, V, W)
-        return jnp.sum((target_tensor - T_hat) ** 2)
-    # =====================================================
-
-    # THIS LOSS FUNCTION HAS DISCRETINIZATION PENALTY, WE WANT TO OPTIMIZE MORE FOR CORRECT WHEN ROUNDED!!!
-    # def loss_fn(params, disc_weight):
-    #     U, V, W = params
-    #     T_hat = jnp.einsum('ir,jr,kr->ijk', U, V, W)
-    #     reconstruction_loss = jnp.sum((target_tensor - T_hat) ** 2)
         
-    #     # Always compute discretization penalty (but multiply by weight)
-    #     # This avoids the if statement that causes JAX tracing issues
-    #     def half_integer_distance(x):
-    #         rounded = jnp.round(x * 2) / 2
-    #         return jnp.sum((x - rounded) ** 2)
+        # Reconstruction loss
+        reconstruction_loss = jnp.sum((target_tensor - T_hat) ** 2)
         
-    #     disc_penalty = (half_integer_distance(U) + 
-    #                 half_integer_distance(V) + 
-    #                 half_integer_distance(W))
+        # Sparsity (L1)
+        sparsity = (
+            jnp.sum(jnp.abs(U)) +
+            jnp.sum(jnp.abs(V)) +
+            jnp.sum(jnp.abs(W))
+        )
         
-    #     # When disc_weight=0, this just adds 0
-    #     return reconstruction_loss + disc_weight * disc_penalty
-    # =========================================================
+        # Integer attraction (soft projection)
+        def integer_distance(x):
+            return jnp.sum((x - jnp.round(x)) ** 2)
 
-    # Loss function to bias towards Strassen-like solutions (with -1,0,1 coefficients):
-    # def loss_fn(params):
-    #     U, V, W = params
-    #     T_hat = jnp.einsum('ir,jr,kr->ijk', U, V, W)
-
-    #     # 1. Exact reconstruction pressure
-    #     recon_loss = jnp.sum((target_tensor - T_hat) ** 2)
-
-    #     # 2. Sparsity (L1)
-    #     sparsity = (
-    #         jnp.sum(jnp.abs(U)) +
-    #         jnp.sum(jnp.abs(V)) +
-    #         jnp.sum(jnp.abs(W))
-    #     )
-
-    #     # 3. Integer attraction (soft projection)
-    #     def integer_distance(x):
-    #         return jnp.sum((x - jnp.round(x)) ** 2)
-
-    #     integer_penalty = (
-    #         integer_distance(U) +
-    #         integer_distance(V) +
-    #         integer_distance(W)
-    #     )
-
-    #     return (
-    #         recon_loss
-    #         + 1e-4 * sparsity
-    #         + 1e-3 * integer_penalty
-    #     )
-    # =========================================================
-    # Strassen like loss function with annealed discretization penalty:
-    # def loss_fn(params):  # Added disc_weight!
-    #     disc_weight = 0.01  # hard coded to allow SAME function signature for usage with other modified code blocks.
-    #     U, V, W = params
-    #     T_hat = jnp.einsum('ir,jr,kr->ijk', U, V, W)
-    #     recon_loss = jnp.sum((target_tensor - T_hat) ** 2)
+        integer_penalty = (
+            integer_distance(U) +
+            integer_distance(V) +
+            integer_distance(W)
+        )
         
-    #     # Half-integer penalty
-    #     def half_integer_distance(x):
-    #         rounded = jnp.round(x * 2) / 2
-    #         return jnp.sum((x - rounded) ** 2)
-        
-    #     disc_penalty = (
-    #         half_integer_distance(U) +
-    #         half_integer_distance(V) +
-    #         half_integer_distance(W)
-    #     )
-        
-    #     return recon_loss + disc_weight * disc_penalty
+        # Combine losses with weights
+        return (
+            reconstruction_loss
+            + 1e-4 * sparsity
+            + 1e-3 * integer_penalty
+        )
     
     return loss_fn
 
 # --OPTION--
 
+# Modify this optimizer as you see fit! You can also implement multiple optimizers and select between them via a command-line argument.
+# BE SURE TO PRESERVE ALL LEVELS OF INDENTATION RELATIVE TO THIS COMMENT!
+import optax
 
-def create_optimizer(learning_rate):
+def create_optimizer(learning_rate=0.01, 
+                     optimizer_type='nadam', 
+                     clip_gradient=True, 
+                     warmup_steps=1000, 
+                     decay_steps=5000, 
+                     peak_value=0.1):
     """
     Create the optimizer for training.
     
-    LLM EVOLUTION GUIDE:
-    You can modify this to use different optimizers or learning rate schedules.
+    Args:
+        learning_rate (float): The initial learning rate.
+        optimizer_type (str): Type of optimizer to use. Defaults to 'nadam'.
+        clip_gradient (bool): Whether to clip gradients. Defaults to True.
+        warmup_steps (int): Number of steps for warmup. Defaults to 1000.
+        decay_steps (int): Number of steps for decay. Defaults to 5000.
+        peak_value (float): Peak value for warmup cosine decay schedule. Defaults to 0.1.
     
-    CURRENT APPROACH:
-    - Adam with fixed learning rate
-    
-    EXAMPLE MODIFICATIONS (COME UP WITH YOUR OWN VARIATIONS TOO!):
-    1. Different optimizers:
-       - optax.sgd(learning_rate, momentum=0.9, nesterov=True)
-       - optax.rmsprop(learning_rate)
-       - optax.adamw(learning_rate, weight_decay=1e-4)
-       - optax.lion(learning_rate)
-       
-    2. Learning rate schedules:
-       schedule = optax.exponential_decay(
-           init_value=0.01,
-           transition_steps=1000,
-           decay_rate=0.96
-       )
-       return optax.adam(schedule)
-       
-    3. Cosine annealing:
-       schedule = optax.cosine_decay_schedule(
-           init_value=0.01,
-           decay_steps=10000,
-           alpha=0.0
-       )
-       return optax.adam(schedule)
-       
-    4. Warmup + decay:
-       schedule = optax.warmup_cosine_decay_schedule(
-           init_value=0.0,
-           peak_value=0.01,
-           warmup_steps=1000,
-           decay_steps=10000
-       )
-       return optax.adam(schedule)
-       
-    5. Adaptive gradient clipping:
-       return optax.chain(
-           optax.clip_by_global_norm(1.0),
-           optax.adam(learning_rate)
-       )
+    Returns:
+        optax.GradientTransformation: The created optimizer.
     """
-    return optax.adam(learning_rate)
 
+    # Simplify the learning rate schedule definition
+    if warmup_steps > 0 and decay_steps > 0 and peak_value is not None:
+        schedule = optax.warmup_cosine_decay_schedule(
+            init_value=0.0,
+            peak_value=peak_value,
+            warmup_steps=warmup_steps,
+            decay_steps=decay_steps
+        )
+    elif decay_steps > 0:
+        schedule = optax.cosine_decay_schedule(
+            init_value=learning_rate,
+            decay_steps=decay_steps,
+            alpha=0.0
+        )
+    else:
+        schedule = learning_rate
 
+    # Reduce the number of optimizers and simplify their definitions
+    if optimizer_type =='sgd':
+        optimizer = optax.sgd(schedule, momentum=0.95, nesterov=True)
+    elif optimizer_type == 'adam':
+        optimizer = optax.adam(schedule, b1=0.85, b2=0.99, eps=1e-8)
+    elif optimizer_type == 'nadam':
+        optimizer = optax.nadam(schedule, b1=0.85, b2=0.99, eps=1e-8)
+    else:
+        optimizer = optax.nadam(schedule, b1=0.85, b2=0.99, eps=1e-8)  # Default to Nadam
 
+    # Remove unnecessary clipping parameters
+    if clip_gradient:
+        optimizer = optax.chain(
+            optax.clip_by_global_norm(10.0),
+            optimizer
+        )
+
+    return optimizer
 
 # --OPTION--
 # functionality wise, this code block should not really be modified. all variable names are CRUCIAL to stay. We still want to call main through def main.
@@ -377,18 +294,6 @@ def main():
     exp_dir = resolve_exp_dir(args)
     thisFileName = os.path.basename(__file__)
 
-    print(jax.devices())
-    jax.config.update("jax_platform_name", "gpu")
-
-    try:
-        # This will now trigger the error here if the GPU is missing
-        devices = jax.devices()
-        print(f"Found devices: {devices}")
-    except RuntimeError as e:
-        print(f"ERROR: Could not initialize GPU: {e}")
-        print("Falling back to CPU for debugging...")
-        jax.config.update("jax_platform_name", "cpu")
-        devices = jax.devices()
     # Problem dimensions (DO NOT MODIFY N, M, P - only R can be evolved)
     N = args.N
     M = args.M
@@ -471,7 +376,7 @@ def main():
         You can modify this to use smarter initialization strategies.
         
         CURRENT APPROACH:
-        - Random normal initialization
+        - Hybrid initialization combining uniform and normal distributions
         
         EXAMPLE MODIFICATIONS (COME UP WITH YOUR OWN VARIATIONS TOO!):
         1. Smaller initial values (better for discrete solutions):
@@ -496,26 +401,29 @@ def main():
         4. Strassen-inspired (for 2×2):
         if dim_A == 4 and R == 7:
             # Initialize with Strassen structure + noise
-            U_base = jnp.array([[1,0,1,0,1,-1,0], [0,0,0,0,1,0,1], ...])
+            U_base = jnp.array([[1,0,1,0,1,-1,0], [0,0,0,0,1,0,1], [0,1,0,1,0,0,1], [0,0,1,0,0,1,0]])
             U = U_base + jax.random.normal(k1, (4, 7)) * 0.1
             
         5. Xavier/He initialization:
         scale = jnp.sqrt(2.0 / (dim_A + R))
         return [
             jax.random.normal(k1, (dim_A, R)) * scale,
-            ...
+            jax.random.normal(k2, (dim_B, R)) * scale,
+            jax.random.normal(k3, (dim_C, R)) * scale
         ]
         """
         k1, k2, k3 = jax.random.split(k, 3)
+        scale_uniform = 0.5
+        scale_normal = 0.1
         return [
-            jax.random.normal(k1, (dim_A, R)),
-            jax.random.normal(k2, (dim_B, R)),
-            jax.random.normal(k3, (dim_C, R))
+            jax.random.uniform(k1, (dim_A, R), minval=-scale_uniform, maxval=scale_uniform) + jax.random.normal(k1, (dim_A, R)) * scale_normal,
+            jax.random.uniform(k2, (dim_B, R), minval=-scale_uniform, maxval=scale_uniform) + jax.random.normal(k2, (dim_B, R)) * scale_normal,
+            jax.random.uniform(k3, (dim_C, R), minval=-scale_uniform, maxval=scale_uniform) + jax.random.normal(k3, (dim_C, R)) * scale_normal
         ]
 
     # Initialize batch
     batch_params = jax.vmap(init_params)(keys)
-    batch_opt_state = jax.vmap(optimizer.init)(batch_params)
+    batch_opt_state = jax.vmap(optimizer.init)(batch_params) 
 
 # --OPTION--
 # PRESERVE ALL ORIGINAL LEVELS OF INDENTATION RELATIVE TO THIS COMMENT BELOW!
