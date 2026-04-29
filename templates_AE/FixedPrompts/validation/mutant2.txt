@@ -1,24 +1,26 @@
 python
-def calculate_area(length, width):
-    area = length * width
-    print("The area is:", area)
-    return area
+import numpy as np
 
-def calculate_perimeter(length, width):
-    perimeter = 2 * (length + width)
-    print("The perimeter is:", perimeter)
-    return perimeter
+def calculate_distance(x1, y1, x2, y2):
+    """
+    Calculate the Euclidean distance between two points.
 
-class Rectangle:
-    def __init__(self, length, width):
-        self.length = length
-        self.width = width
+    Parameters:
+        x1 (float): The x-coordinate of the first point.
+        y1 (float): The y-coordinate of the first point.
+        x2 (float): The x-coordinate of the second point.
+        y2 (float): The y-coordinate of the second point.
 
-    def get_area(self):
-        return self.calculate_area()
+    Returns:
+        float: The Euclidean distance between the two points.
+    """
+    return np.sqrt((x2 - x1)**2 + (y2 - y1)**2)
 
-    def get_perimeter(self):
-        return self.calculate_perimeter()
+# Example usage:
+point1 = (1.0, 2.0)
+point2 = (4.0, 6.0)
+distance = calculate_distance(point1[0], point1[1], point2[0], point2[1])
+print(f"The distance between {point1} and {point2} is {distance:.2f}")
 
 ```python
 {}

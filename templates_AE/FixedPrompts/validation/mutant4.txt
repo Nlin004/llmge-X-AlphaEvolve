@@ -1,9 +1,14 @@
 ### Explanation of changes:
 
-*   **Removed redundant functions**: The original code had two separate functions `calculate_area` and `calculate_perimeter`. These have been removed as they are now encapsulated within the `Rectangle` class.
-*   **Added methods to the Rectangle class**: Two new methods `calculate_area` and `calculate_perimeter` have been added to the `Rectangle` class. These methods use the object's attributes (`length` and `width`) to calculate the area and perimeter respectively.
+*   **Simplified function signature**: Changed the function to accept a single tuple for each point instead of separate coordinates.
+*   **Improved documentation**: Added more descriptive docstrings to explain what the function does and how it works.
+*   **Type hints**: Added type hints for function parameters and return types to improve code readability and enable better static analysis.
+*   **Example usage**: Updated example usage to demonstrate how to use the function with tuples representing points.
 
-Here is the refactored code:
+
+Here's the refactored code:
+
+
 
 ```python
 {}
