@@ -383,6 +383,9 @@ def main():
     exp_dir = resolve_exp_dir(args)
     thisFileName = os.path.basename(__file__)
 
+    print(jax.devices())
+    jax.config.update("jax_platform_name", "gpu") 
+
     # Problem dimensions (DO NOT MODIFY N, M, P - only R can be evolved)
     N = args.N
     M = args.M

@@ -266,6 +266,114 @@ def check4job_completion(job_id, local_output=None, check_interval=60, timeout=1
         # Wait for some time before checking again
         time.sleep(check_interval)
         print(f'\t‣ Waiting on check4job_completion LLM job: {job_id} Time: {round(time.time() - start_time)}s', flush=True)
+
+def mark_failed_ind(gene_id, reason, status='completed', fitness=INVALID_FITNESS_MAX):
+    """Persist a normalized failure record so end-of-run reporting can explain failures."""
+    if gene_id not in GLOBAL_DATA:
+        GLOBAL_DATA[gene_id] = {
+            'sub_flag': False,
+            'job_id': 'None',
+            'status': status,
+            'fitness': fitness,
+            'start_time': time.time(),
+        }
+
+    GLOBAL_DATA[gene_id]['failed'] = True
+    GLOBAL_DATA[gene_id]['fail_reason'] = reason
+    GLOBAL_DATA[gene_id]['status'] = status
+    GLOBAL_DATA[gene_id]['fitness'] = fitness
+
+
+def build_failed_individuals_report(population):
+    failed = []
+    for ind in population:
+        gene_id = ind[0]
+        data = GLOBAL_DATA.get(gene_id, {})
+        fit = data.get('fitness', ind.fitness.values if hasattr(ind, 'fitness') else None)
+        if fit == INVALID_FITNESS_MAX:
+            failed.append({
+                'gene_id': gene_id,
+                'fitness': fit,
+                'status': data.get('status', 'UNKNOWN'),
+                'reason': data.get('fail_reason', data.get('status', 'UNKNOWN')),
+                'job_id': data.get('results_job', data.get('job_id')),
+            })
+    return failed
+
+
+def build_evolution_stats(population, failed_individuals):
+    total = len(population)
+    failed_count = len(failed_individuals)
+    completed_count = 0
+    running_count = 0
+    unknown_count = 0
+
+    for ind in population:
+        data = GLOBAL_DATA.get(ind[0], {})
+        status = data.get('status', 'UNKNOWN')
+        if status == 'completed':
+            completed_count += 1
+        elif status == 'running eval':
+            running_count += 1
+        elif status == 'UNKNOWN':
+            unknown_count += 1
+
+    reasons = {}
+    for rec in failed_individuals:
+        reason = rec['reason']
+        reasons[reason] = reasons.get(reason, 0) + 1
+
+    failure_rate = (failed_count / total) if total > 0 else 0.0
+    return {
+        'total_individuals': total,
+        'failed_individuals': failed_count,
+        'completed_individuals': completed_count,
+        'running_individuals': running_count,
+        'unknown_status_individuals': unknown_count,
+        'failure_rate': failure_rate,
+        'failure_reasons': reasons,
+    }
+
+
+def print_failed_individuals_report(population, failed_limit=0):
+    failed_individuals = build_failed_individuals_report(population)
+    stats = build_evolution_stats(population, failed_individuals)
+
+    print("\n-- Failed Individuals Summary --")
+    print(f"Total Individuals: {stats['total_individuals']}")
+    print(f"Failed Individuals: {stats['failed_individuals']}")
+    print(f"Failure Rate: {stats['failure_rate']:.2%}")
+    print(f"Completed Individuals: {stats['completed_individuals']}")
+    print(f"Running Individuals: {stats['running_individuals']}")
+    print(f"Unknown Status Individuals: {stats['unknown_status_individuals']}")
+    print(f"Failure Reasons: {stats['failure_reasons']}")
+
+    if failed_limit is not None and failed_limit > 0:
+        failed_individuals = failed_individuals[:failed_limit]
+
+    print("\n-- Failed Individuals (gene_id, fitness, reason, status, job_id) --")
+    if len(failed_individuals) == 0:
+        print("No failed individuals found.")
+    else:
+        for rec in failed_individuals:
+            print(
+                f"{rec['gene_id']} | fitness={rec['fitness']} | "
+                f"reason={rec['reason']} | status={rec['status']} | job_id={rec['job_id']}"
+            )
+
+    return {
+        'stats': stats,
+        'failed_individuals': failed_individuals,
+    }
+
+
+## def write_failed_individuals_report(report, report_file):
+##    if report_file is None:
+##        return
+##    os.makedirs(os.path.dirname(report_file) or '.', exist_ok=True)
+##    with open(report_file, 'w') as f:
+##        json.dump(report, f, indent=2)
+##    print(f"Failed individuals report written to {report_file}")
         
 def generate_random_string(length=20):
     # Define the characters that can be used in the string
@@ -368,6 +476,7 @@ def check4model2run(gene_id):
         print(f'\t☠ Model file does not exist for gene_id: {gene_id}, skipping evaluation.')
         GLOBAL_DATA[gene_id]['status'] = 'completed'
         GLOBAL_DATA[gene_id]['fitness'] = INVALID_FITNESS_MAX
+        mark_failed_ind(gene_id, reason='MODEL_FILE_MISSING')
         return
 
     model_path = os.path.join(OUTPUT_DIR, str(GENERATION), f'{gene_id}_model.txt')
@@ -430,6 +539,7 @@ def check4results(gene_id):
     elif job_done is False:
         GLOBAL_DATA[gene_id]['status'] = 'completed'
         GLOBAL_DATA[gene_id]['fitness'] = INVALID_FITNESS_MAX
+        mark_failed_ind(gene_id, reason='EVAL_JOB_ERROR')
         # print(f'Model from Gene: {gene_id} Failed to Run')
     else:
         # print('Job Has Not Finished Running Yet...', flush=True)
@@ -460,10 +570,12 @@ def check_and_update_fitness(population, timeout=CUF_TIMEOUT, loop_delay=60):
             if gene_id not in GLOBAL_DATA:
                 GLOBAL_DATA[gene_id] = {'sub_flag':False, 'job_id':'None', 'status':'completed', 
                                         'fitness':INVALID_FITNESS_MAX, 'start_time':time.time()}
+                mark_failed_ind(gene_id, reason='MISSING_GLOBAL_DATA_ENTRY')
             
             if GLOBAL_DATA[gene_id]['sub_flag']==False:
                 ind.fitness.values = INVALID_FITNESS_MAX # Max error
                 GLOBAL_DATA[gene_id]['status'] == "completed"      
+                mark_failed_ind(gene_id, reason='SUBMISSION_FAILED')
             if ind.fitness.values == PLACEHOLDER_FITNESS:  # If fitness not assigned
                 # check for gene_id_model.txt file
                 if GLOBAL_DATA[gene_id]['status'] == 'subbed file':
@@ -487,11 +599,13 @@ def check_and_update_fitness(population, timeout=CUF_TIMEOUT, loop_delay=60):
                     print(f"Timeout for gene ID {gene_id}")
                     ind.fitness.values = INVALID_FITNESS_MAX 
                     GLOBAL_DATA[gene_id]['status'] = 'FAILED: TIMEOUT'
+                    mark_failed_ind(gene_id, reason='TIMEOUT')
                 else:
                     if 'results_job' not in GLOBAL_DATA[gene_id].keys():
                         ind.fitness.values = INVALID_FITNESS_MAX # Max error
                         print(f'\t☠ No Placeholder Fitness for: {gene_id}')
                         GLOBAL_DATA[gene_id]['status'] == "completed"
+                        mark_failed_ind(gene_id, reason='RESULTS_JOB_MISSING')
                     else:
                         print(f"\t‣ Still Waiting On: Gene: {gene_id}", flush=True)
                         print_job_info(GLOBAL_DATA[gene_id])
@@ -864,6 +978,13 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Run Generation')
     # Add arguments
     parser.add_argument('checkpoints', type=str, help='Save Dir')
+    parser.add_argument('--summary-mode', type=str, default='both', choices=['both', 'best', 'failed'],
+                        help='End-of-run summary output: both, best, or failed.')
+    parser.add_argument('--failed-limit', type=int, default=0,
+                        help='Max failed individuals to print in summary. 0 means all.')
+#    parser.add_argument('--failed-report-file', type=str, default=None,
+#                        help='Optional JSON output path for failed-individuals report.')
+
     # Parse the arguments
     args = parser.parse_args()
     print(DNA_TXT)
@@ -989,8 +1110,17 @@ if __name__ == "__main__":
         LINKED_GENES = {}
         # mutate x prompts
         mutate_prompts()
-        
+
+
     print("-- End of Evolution --")
-    best_ind = tools.selBest(population, 1)[0]
-    print(f"Best Individual: {best_ind}")
-    print(f"Best Fitness: {best_ind.fitness.values}")
+    report = None
+    if args.summary_mode in ('both', 'best'):
+        best_ind = tools.selBest(population, 1)[0]
+        print(f"Best Individual: {best_ind}")
+        print(f"Best Fitness: {best_ind.fitness.values}")
+
+    if args.summary_mode in ('both', 'failed'):
+        report = print_failed_individuals_report(population, failed_limit=args.failed_limit)
+
+#    if report is not None:
+#        write_failed_individuals_report(report, args.failed_report_file)
