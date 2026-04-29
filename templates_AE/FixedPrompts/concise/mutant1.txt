@@ -1,11 +1,29 @@
-Here is a rephrased version of your code with improvements and explanations:
+python
+import jax.numpy as jnp
 
-### CP Decomposition Function
-#### Overview
-The following function performs a CP decomposition on a given input matrix.
-CP decomposition is a technique used to decompose a tensor into a sum of rank-one tensors.
+def cp_decomposition(matrix):
+    # Initialize random weights for each factor matrix
+    num_factors = 3
+    ranks = [2, 2, 2]
+    weights = [jnp.random.rand(r) for r in ranks]
 
-#### Code
+    # Perform iterative updates using gradient descent
+    learning_rate = 0.01
+    iterations = 1000
+    for _ in range(iterations):
+        # Compute the predicted tensor
+        predicted_tensor = jnp.einsum('ij,jk,kl->ikl', weights[0], weights[1], weights[2])
+
+        # Compute the loss (mean squared error)
+        loss = jnp.mean((matrix - predicted_tensor) ** 2)
+
+        # Backpropagate the gradients
+        grads = jax.grad(loss, weights)
+
+        # Update the weights using gradient descent
+        weights = [w - learning_rate * g for w, g in zip(weights, grads)]
+
+    return weights
 
 ```python
 {}

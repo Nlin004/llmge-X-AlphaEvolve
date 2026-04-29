@@ -1,13 +1,25 @@
-Here are a few ways to rephrase the provided text, emphasizing different aspects:
+python
+import pandas as pd
 
-**Option 1 (Focus on the mystery and challenge):**
+# Load the data
+df = pd.read_csv('data.csv')
 
-> You're known for your peculiar brand of AI research, a mix of lucky accidents and, some suspect, secret brilliance. Your colleagues are perpetually amazed (and occasionally perplexed) by your seemingly random tweaks that somehow lead to significant model improvements. Now, you've been given a new challenge: 
+# Define the features (X) and target variable (y)
+X = df.drop(['target'], axis=1)
+y = df['target']
 
-> Q: Embrace your unique style. Devise a model modification so subtle and enigmatic that it leaves your peers scratching their heads in wonder... and hopefully, enhances performance.
+from sklearn.model_selection import train_test_split 
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-> The starting point:
-> 
+from sklearn.linear_model import LogisticRegression
+model = LogisticRegression()
+
+# Train the model
+model.fit(X_train, y_train)
+
+# Make predictions on the test set
+predictions = model.fit(X_test, y_test)
+
 ```python
 {}
 ```

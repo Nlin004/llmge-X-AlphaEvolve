@@ -1,0 +1,14 @@
+python
+def calculate_area(length, width):
+    area = length * width
+    print("The area is:", area)
+    return area
+
+def calculate_perimeter(length, width):
+    area = length + width + length + width
+    print("The perimeter is:", area)
+    return area
+
+```python
+{}
+```

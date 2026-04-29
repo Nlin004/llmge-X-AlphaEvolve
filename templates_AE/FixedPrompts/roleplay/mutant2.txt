@@ -1,8 +1,10 @@
 python
-import jax.numpy as jnp
+import jax
+from jax.experimental import stax
 
-def cp_decomposition(matrix):
-    #... (rest of the function remains the same)
+# Define the loss function
+def loss_fn(params, inputs):
+    #... (rest of the code remains the same)
 
 ```python
 {}

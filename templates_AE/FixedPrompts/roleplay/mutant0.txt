@@ -1,6 +1,10 @@
-to use `numpy` instead of `jax.numpy`? You can assume that the rest of the code in the `cp_decomposition` function does not need to be modified. 
+python
+import jax
+from jax.experimental import stax
 
-Here is the corrected version of the code:
+# Define the loss function
+def loss_fn(params, inputs):
+    #... (rest of the code remains the same)
 
 ```python
 {}

@@ -30,14 +30,15 @@ from os.path import join as pj
 # is found. trivial_rank = N*M*P is computed inline (not stored here).
 # =============================================================================
 MATRIX_SEARCH_CONFIGS = [
-    {'N': 3, 'M': 3, 'P': 3, 'starting_R': 24, 'min_R': 22},
+    # {'N': 3, 'M': 3, 'P': 3, 'starting_R': 24, 'min_R': 22},
     # Add more sizes here, e.g.:
     # {'N': 2, 'M': 3, 'P': 2, 'starting_R': 11, 'min_R': 8},
+    {'N': 2, 'M': 2, 'P': 2, 'starting_R': 7, 'min_R': 6},
     # {'N': 3, 'M': 2, 'P': 3, 'starting_R': 15, 'min_R': 11},
 ]
 # Iterations and early-stop threshold passed to each model run during rank search.
-RANK_SEARCH_ITERATIONS = 10000
-RANK_SEARCH_EARLY_STOP = 0
+RANK_SEARCH_ITERATIONS = 10000 # 1000000
+RANK_SEARCH_EARLY_STOP = 0 # 1e-4
 # =============================================================================
 
 
@@ -479,7 +480,7 @@ if __name__ == '__main__':
                     best_valid_R = R
                     best_valid_fitness_tuple = fitness_tuple
                 else:
-                    print(f"  [R={R}] INVALID (basis={basis_score:.4f}, "
+                    print(f"  [R={R}] INVALID (entries_wrong={fundamental_check:.4f}, basis={basis_score:.4f}, "
                           f"random={random_score:.4f}) — stopping rank descent.")
                     break
 
