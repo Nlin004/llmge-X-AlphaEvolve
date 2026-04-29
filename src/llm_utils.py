@@ -300,6 +300,14 @@ def generate_augmented_code(txt2llm, augment_idx, apply_quality_control, top_p, 
         )
         return fallback_code
 
+    if allow_invalid_candidate:
+        print(
+            "LLM did not return any usable text after retries; returning the original "
+            "block unchanged so this gene can still be evaluated.",
+            flush=True,
+        )
+        return base_code
+
     raise RuntimeError("Failed to get a valid response from the LLM after 3 retries.")
 
 def extract_note(txt):
