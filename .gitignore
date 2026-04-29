@@ -19,5 +19,6 @@ output/
 **/models/
 **/weights/
 **/results/
+**/factors/
 **/llmge_models/
 slurm-*.out
