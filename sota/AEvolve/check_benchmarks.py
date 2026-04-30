@@ -89,19 +89,29 @@ def parse_rank_file(path: Path):
     return gene_id, sizes
 
 
-def classify(best_valid_R, size_key):
+def classify(N, M, P, best_valid_R):
     """
-    Given a validated rank (or None) and a size key (N,M,P),
-    return (hits_best_known, hits_alphaevolve, best_known_rank, ae_rank).
+    Given dimensions N,M,P and a validated rank (or None),
+    return (eq_bk, lt_bk, eq_ae, lt_ae, lt_triv, best_known_rank, ae_rank, trivial_rank).
+    eq_bk: best_valid_R == best_known_rank
+    lt_bk: best_valid_R < best_known_rank
+    eq_ae: best_valid_R == alphaevolve_rank
+    lt_ae: best_valid_R < alphaevolve_rank
+    lt_triv: best_valid_R < trivial (n*m*p)
     """
-    if size_key not in BENCHMARKS:
-        return False, False, None, None
-    bk, ae = BENCHMARKS[size_key]
+    size_key = (N, M, P)
+    bk = ae = None
+    if size_key in BENCHMARKS:
+        bk, ae = BENCHMARKS[size_key]
+    trivial = N * M * P
     if best_valid_R is None:
-        return False, False, bk, ae
-    hits_bk = best_valid_R <= bk
-    hits_ae = best_valid_R <= ae
-    return hits_bk, hits_ae, bk, ae
+        return False, False, False, False, False, bk, ae, trivial
+    eq_bk = bk is not None and best_valid_R == bk
+    lt_bk = bk is not None and best_valid_R < bk
+    eq_ae = ae is not None and best_valid_R == ae
+    lt_ae = ae is not None and best_valid_R < ae
+    lt_triv = best_valid_R < trivial
+    return eq_bk, lt_bk, eq_ae, lt_ae, lt_triv, bk, ae, trivial
 
 
 def main():
@@ -126,19 +136,28 @@ def main():
 
     # ---- Collect all hits ----
     rows = []
-    hits_bk   = []     # (gene_id, size, R, bk_rank)
-    hits_ae   = []     # (gene_id, size, R, ae_rank)
+    matches_bk = []   # (gene_id, size, R, bk_rank)
+    beats_bk   = []   # (gene_id, size, R, bk_rank, ae_rank)
+    matches_ae = []   # (gene_id, size, R, ae_rank)
+    beats_ae   = []   # (gene_id, size, R, ae_rank)
+    beats_triv = []   # (gene_id, size, R, trivial_rank)
 
     for rf in rank_files:
         gene_id, sizes = parse_rank_file(rf)
         for s in sizes:
-            key = (s["N"], s["M"], s["P"])
-            h_bk, h_ae, bk, ae = classify(s["best_valid_R"], key)
             size_str = f"{s['N']}x{s['M']}x{s['P']}"
-            if h_bk:
-                hits_bk.append((gene_id, size_str, s["best_valid_R"], bk, ae))
-            if h_ae:
-                hits_ae.append((gene_id, size_str, s["best_valid_R"], ae))
+            eq_bk, lt_bk, eq_ae, lt_ae, lt_triv, bk, ae, trivial = \
+                classify(s["N"], s["M"], s["P"], s["best_valid_R"]) 
+            if lt_triv:
+                beats_triv.append((gene_id, size_str, s["best_valid_R"], trivial))
+            if eq_bk:
+                matches_bk.append((gene_id, size_str, s["best_valid_R"], bk))
+            if lt_bk:
+                beats_bk.append((gene_id, size_str, s["best_valid_R"], bk, ae))
+            if eq_ae:
+                matches_ae.append((gene_id, size_str, s["best_valid_R"], ae))
+            if lt_ae:
+                beats_ae.append((gene_id, size_str, s["best_valid_R"], ae))
 
     # ---- Print summary ----
     W = 80
@@ -146,29 +165,42 @@ def main():
     print("BENCHMARK HIT REPORT")
     print("=" * W)
 
-    print(f"\nMODELS MATCHING BEST-KNOWN RANK  ({len(hits_bk)} hits)")
+    print(f"\nMODELS BEATING TRIVIAL RANK (n*m*p)  ({len(beats_triv)} hits)")
     print("-" * W)
-    if hits_bk:
-        for gene_id, size, R, bk, ae in hits_bk:
+    if beats_triv:
+        for gene_id, size, R, trivial in beats_triv:
+            print(f"  {gene_id:<35} size={size:<14} R={R}  (trivial={trivial})")
+    else:
+        print("  (none)")
+
+    print(f"\nMODELS MATCHING BEST-KNOWN RANK  ({len(matches_bk)} hits)")
+    print("-" * W)
+    if matches_bk:
+        for gene_id, size, R, bk in matches_bk:
             print(f"  {gene_id:<35} size={size:<14} R={R}  (best_known={bk})")
     else:
         print("  (none)")
 
-    hits_bk_only = [(g, s, R, bk, ae) for (g, s, R, bk, ae) in hits_bk
-                    if not any(g == g2 and s == s2 for g2, s2, _, _ in hits_ae)]
-
-    print(f"\nMODELS BEATING BEST-KNOWN BUT NOT ALPHAEVOLVE  ({len(hits_bk_only)} hits)")
+    print(f"\nMODELS BEATING BEST-KNOWN RANK  ({len(beats_bk)} hits)")
     print("-" * W)
-    if hits_bk_only:
-        for gene_id, size, R, bk, ae in hits_bk_only:
+    if beats_bk:
+        for gene_id, size, R, bk, ae in beats_bk:
             print(f"  {gene_id:<35} size={size:<14} R={R}  (best_known={bk}, alphaevolve={ae})")
     else:
         print("  (none)")
 
-    print(f"\nMODELS MATCHING ALPHAEVOLVE RANK  ({len(hits_ae)} hits)")
+    print(f"\nMODELS MATCHING ALPHAEVOLVE RANK  ({len(matches_ae)} hits)")
     print("-" * W)
-    if hits_ae:
-        for gene_id, size, R, ae in hits_ae:
+    if matches_ae:
+        for gene_id, size, R, ae in matches_ae:
+            print(f"  {gene_id:<35} size={size:<14} R={R}  (alphaevolve={ae})")
+    else:
+        print("  (none)")
+
+    print(f"\nMODELS BEATING ALPHAEVOLVE RANK  ({len(beats_ae)} hits)")
+    print("-" * W)
+    if beats_ae:
+        for gene_id, size, R, ae in beats_ae:
             print(f"  {gene_id:<35} size={size:<14} R={R}  (alphaevolve={ae})")
     else:
         print("  (none)")
