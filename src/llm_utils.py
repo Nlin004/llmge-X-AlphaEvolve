@@ -183,6 +183,12 @@ def _env_int(name, default):
     except (TypeError, ValueError):
         return default
 
+def _llm_request_timeout():
+    value = os.getenv("LLM_HTTP_TIMEOUT")
+    if value is None or value.strip().lower() in {"", "0", "none", "false", "off"}:
+        return None
+    return int(value)
+
 def is_valid_python(code_text):
     """Return True when a candidate can at least be imported by Python."""
     try:
@@ -670,7 +676,7 @@ def submit_mixtral_local(prompt, max_new_tokens=256, temperature=0.2, top_p=0.15
             server_url,
             headers=headers,
             json=payload,
-            timeout=int(os.getenv("LLM_HTTP_TIMEOUT", "90")),
+            timeout=_llm_request_timeout(),
         )
         
         if response.status_code == 200:
@@ -704,7 +710,7 @@ def submit_deepseek_local(prompt, max_new_tokens=256, temperature=0.2, top_p=0.1
             server_url,
             headers=headers,
             json=payload,
-            timeout=int(os.getenv("LLM_HTTP_TIMEOUT", "90")),
+            timeout=_llm_request_timeout(),
         )
         
         if response.status_code == 200:

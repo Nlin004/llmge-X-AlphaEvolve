@@ -42,6 +42,18 @@ class LLMModel:
     
     def _initialize(self):
         print("initializing")
+        model_kwargs = {}
+        if torch.cuda.is_available():
+            gpu_memory_gib = int(os.getenv("LLM_GPU_MEMORY_GIB", "72"))
+            cpu_offload_gib = int(os.getenv("LLM_CPU_OFFLOAD_GIB", "120"))
+            model_kwargs["max_memory"] = {
+                gpu_idx: f"{gpu_memory_gib}GiB"
+                for gpu_idx in range(torch.cuda.device_count())
+            }
+            model_kwargs["max_memory"]["cpu"] = f"{cpu_offload_gib}GiB"
+            model_kwargs["offload_folder"] = os.getenv("LLM_OFFLOAD_FOLDER", "llm_offload")
+            print(f"CUDA devices visible: {torch.cuda.device_count()}", flush=True)
+            print(f"Model max_memory map: {model_kwargs['max_memory']}", flush=True)
         # TODO figure out how to better handle the initialization (i.e. mixtral dies because it doesn't have attention)
         # TODO find out why when this dies the code around it continues i.e. a model is returned to generate_text, but I never see the print out of "I created my instance"
         self.model = transformers.AutoModelForCausalLM.from_pretrained(
@@ -49,7 +61,8 @@ class LLMModel:
             trust_remote_code=True,
             dtype=torch.bfloat16,
             device_map="auto",
-            attn_implementation="sdpa" # faster inference
+            attn_implementation="sdpa", # faster inference
+            **model_kwargs,
         ).eval()
         print("model loaded")
 

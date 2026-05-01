@@ -2,6 +2,7 @@
 #SBATCH --job-name=LLMGE01_Server
 #SBATCH -t 8:00:00
 #SBATCH --nodes=1
+#SBATCH --gres=gpu:2
 #SBATCH -G 2
 #SBATCH -C "A100-80GB|H100|H200"
 #SBATCH --mem 160G
@@ -18,6 +19,9 @@ export CUDA_VISIBLE_DEVICES=0,1
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 export LLM_BATCH_SIZE=1
 export MAX_SERVER_NEW_TOKENS=256
+export LLM_GPU_MEMORY_GIB=72
+export LLM_CPU_OFFLOAD_GIB=120
+export LLM_OFFLOAD_FOLDER=$(pwd)/llm_offload
 
 export SERVER_HOSTNAME=$(hostname)
 
