@@ -171,6 +171,18 @@ def validate_augmented_file(full_code_text):
 
     return True
 
+def _env_flag(name, default=True):
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+
+def _env_int(name, default):
+    try:
+        return int(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+
 def is_valid_python(code_text):
     """Return True when a candidate can at least be imported by Python."""
     try:
@@ -223,6 +235,83 @@ def clean_code_from_llm(code_from_llm):
     raise ValueError("LLM response did not include a recognizable code block.")
 
 
+def _is_c880_verilog_block(code_text):
+    return "def generate_seed_verilog" in code_text and "module c880_impl" in code_text
+
+def _assign_line_indices(code_text):
+    lines = code_text.splitlines()
+    return [
+        idx for idx, line in enumerate(lines)
+        if line.strip().startswith("assign ") and line.rstrip().endswith(";")
+    ]
+
+def _build_c880_partial_mutation_prompt(base_code, source_prompt):
+    """Create a compact LLM prompt that mutates only a small assign cluster."""
+    if not _env_flag("LLM_C880_PARTIAL_MUTATION", True):
+        return None
+    if not _is_c880_verilog_block(base_code):
+        return None
+
+    assign_indices = _assign_line_indices(base_code)
+    if not assign_indices:
+        return None
+
+    window_size = max(1, _env_int("C880_LLM_ASSIGN_WINDOW", 24))
+    window_size = min(window_size, len(assign_indices))
+    start = np.random.randint(0, len(assign_indices) - window_size + 1)
+    selected_indices = assign_indices[start:start + window_size]
+    lines = base_code.splitlines()
+    selected_assigns = "\n".join(lines[idx].strip() for idx in selected_indices)
+
+    prompt_hint = source_prompt.split("```python", 1)[0].strip()
+    compact_prompt = f"""
+You are mutating a small part of the ISCAS-85 C880 Verilog implementation for evolutionary search.
+
+Keep this a local edit. Return exactly {len(selected_indices)} Verilog assign statements, in the same order, with the same left-hand-side signal names shown below. You may simplify or locally vary only the right-hand side expressions. Do not add wires, modules, ports, comments, prose, markdown, Python, always blocks, buses, clocks, or resets.
+
+Original guidance:
+{prompt_hint}
+
+Assign statements to locally mutate:
+```verilog
+{selected_assigns}
+```
+
+Return only the replacement assign statements. Start with the first assign statement and end with the last semicolon.
+""".strip()
+
+    return compact_prompt, selected_indices
+
+def _clean_c880_assign_replacements(llm_text, expected_lhs):
+    if not llm_text:
+        raise ValueError("No assign replacements received from the LLM.")
+
+    fenced_blocks = re.findall(r"```(?:[A-Za-z0-9_+-]+)?\n(.*?)```", llm_text, flags=re.DOTALL)
+    candidate = max(fenced_blocks, key=len).strip() if fenced_blocks else llm_text.strip()
+    assignments = re.findall(r"\bassign\s+([A-Za-z_]\w*)\s*=\s*[^;]+;", candidate, flags=re.DOTALL)
+    assign_lines = re.findall(r"\bassign\s+[A-Za-z_]\w*\s*=\s*[^;]+;", candidate, flags=re.DOTALL)
+
+    normalized_lines = ["    " + " ".join(line.split()) for line in assign_lines]
+    if len(normalized_lines) != len(expected_lhs):
+        raise ValueError(
+            f"Expected {len(expected_lhs)} assign replacements, got {len(normalized_lines)}."
+        )
+
+    if assignments != expected_lhs:
+        raise ValueError(
+            "Assign replacements must preserve left-hand-side names and order. "
+            f"Expected {expected_lhs}, got {assignments}."
+        )
+
+    return normalized_lines
+
+def _stitch_c880_assign_replacements(base_code, selected_indices, replacement_lines):
+    lines = base_code.splitlines()
+    for line_idx, replacement in zip(selected_indices, replacement_lines):
+        lines[line_idx] = replacement
+    return "\n".join(lines) + ("\n" if base_code.endswith("\n") else "")
+
+
 def local_c880_refactor_fallback(base_code):
     """Create a valid C880 variant when the LLM server cannot return text."""
     if "def generate_seed_verilog" not in base_code or "module c880_impl" not in base_code:
@@ -272,6 +361,24 @@ def generate_augmented_code(txt2llm, augment_idx, apply_quality_control, top_p, 
                             inference_submission=False, allow_invalid_candidate=False):
     """Generates augmented code using Mixtral."""
 
+    base_code = retrieve_base_code(augment_idx)
+    partial_mutation = _build_c880_partial_mutation_prompt(base_code, txt2llm)
+    if partial_mutation is not None:
+        txt2llm, selected_assign_indices = partial_mutation
+        base_lines = base_code.splitlines()
+        selected_lhs = [
+            re.match(r"\s*assign\s+([A-Za-z_]\w*)\s*=", base_lines[idx]).group(1)
+            for idx in selected_assign_indices
+        ]
+        print(
+            "Using compact C880 partial mutation prompt with "
+            f"{len(selected_assign_indices)} assign statements.",
+            flush=True,
+        )
+    else:
+        selected_assign_indices = None
+        selected_lhs = None
+
     box_print("PROMPT TO LLM", print_bbox_len=60, new_line_end=False)
 
     print(txt2llm, flush=True) # if you don't Flush the buffer it won't print immediately | James Tip
@@ -289,14 +396,13 @@ def generate_augmented_code(txt2llm, augment_idx, apply_quality_control, top_p, 
         elif LLM_MODEL == 'deepseek':
             llm_code_generator = submit_deepseek_local
         qc_func = llm_code_qc_hf
-        
-    base_code = retrieve_base_code(augment_idx)
+
     retries = 0
     max_retries = int(os.getenv("LLM_RETRIES", "1"))
     fallback_code = None
     fallback_error = None
     while retries < max_retries:
-        if apply_quality_control:
+        if apply_quality_control and selected_assign_indices is None:
             llm_result = llm_code_generator(txt2llm, return_gen=True, top_p=top_p, temperature=temperature)
             if not llm_result:
                 retries += 1
@@ -324,7 +430,15 @@ def generate_augmented_code(txt2llm, augment_idx, apply_quality_control, top_p, 
             continue
 
         try:
-            cleaned_code = clean_code_from_llm(code_from_llm)
+            if selected_assign_indices is not None:
+                replacement_lines = _clean_c880_assign_replacements(code_from_llm, selected_lhs)
+                cleaned_code = _stitch_c880_assign_replacements(
+                    base_code,
+                    selected_assign_indices,
+                    replacement_lines,
+                )
+            else:
+                cleaned_code = clean_code_from_llm(code_from_llm)
             if is_valid_python(cleaned_code):
                 fallback_code = cleaned_code
             validate_candidate_block(cleaned_code, base_code)
@@ -556,7 +670,7 @@ def submit_mixtral_local(prompt, max_new_tokens=256, temperature=0.2, top_p=0.15
             server_url,
             headers=headers,
             json=payload,
-            timeout=int(os.getenv("LLM_HTTP_TIMEOUT", "180")),
+            timeout=int(os.getenv("LLM_HTTP_TIMEOUT", "90")),
         )
         
         if response.status_code == 200:
@@ -590,7 +704,7 @@ def submit_deepseek_local(prompt, max_new_tokens=256, temperature=0.2, top_p=0.1
             server_url,
             headers=headers,
             json=payload,
-            timeout=int(os.getenv("LLM_HTTP_TIMEOUT", "180")),
+            timeout=int(os.getenv("LLM_HTTP_TIMEOUT", "90")),
         )
         
         if response.status_code == 200:
