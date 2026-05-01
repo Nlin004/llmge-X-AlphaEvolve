@@ -262,18 +262,29 @@ def _build_c880_partial_mutation_prompt(base_code, source_prompt):
     if not assign_indices:
         return None
 
-    window_size = max(1, _env_int("C880_LLM_ASSIGN_WINDOW", 24))
+    window_size = max(1, _env_int("C880_LLM_ASSIGN_WINDOW", 12))
     window_size = min(window_size, len(assign_indices))
     start = np.random.randint(0, len(assign_indices) - window_size + 1)
     selected_indices = assign_indices[start:start + window_size]
     lines = base_code.splitlines()
     selected_assigns = "\n".join(lines[idx].strip() for idx in selected_indices)
+    allowed_signals = sorted({
+        token
+        for token in re.findall(r"\b[A-Za-z_]\w*\b", selected_assigns)
+        if token != "assign"
+    }, key=lambda name: (not name.startswith("N"), name))
 
     prompt_hint = source_prompt.split("```python", 1)[0].strip()
     compact_prompt = f"""
 You are mutating a small part of the ISCAS-85 C880 Verilog implementation for evolutionary search.
 
 Keep this a local edit. Return exactly {len(selected_indices)} Verilog assign statements, in the same order, with the same left-hand-side signal names shown below. You may simplify or locally vary only the right-hand side expressions. Do not add wires, modules, ports, comments, prose, markdown, Python, always blocks, buses, clocks, or resets.
+
+Hard signal-name rule:
+- Use only these signal names: {", ".join(allowed_signals)}
+- Do not invent adjacent-number signal names such as N320 when only N319 is shown.
+- Do not rename any left-hand side.
+- If you are uncertain about an assignment, copy that assignment unchanged.
 
 Original guidance:
 {prompt_hint}
