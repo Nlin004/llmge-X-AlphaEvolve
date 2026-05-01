@@ -1,32 +1,31 @@
 gpu_selection: ""
-llm_bash_script: '#!/bin/bash
+llm_bash_script: |
+  #!/bin/bash
+  #SBATCH --job-name=llm_oper
+  #SBATCH -t 8:00:00
+  #SBATCH --gres=gpu:1
+  #SBATCH -G 1
+  #SBATCH --mem-per-gpu 16G
+  #SBATCH -c 2
+  #SBATCH -N 1
 
-    #SBATCH --job-name=llm_oper
-    #SBATCH -t 8:00:00
-    #SBATCH --gres=gpu:1
-    #SBATCH -G 1
-    #SBATCH --mem-per-gpu 16G
-    #SBATCH -c 2
-    #SBATCH -N 1
-    echo "Launching AIsurBL"
-    hostname
+  echo "Launching AIsurBL"
+  hostname
 
-    module load cuda
-    export CUDA_VISIBLE_DEVICES=0
+  module load cuda
+  export CUDA_VISIBLE_DEVICES=0
 
-    {}
+  {}
 
-    '
+python_bash_script: |
+  #!/bin/bash
+  #SBATCH --job-name=evaluateGene
+  #SBATCH -t 1:00:00
+  #SBATCH --mem 8G
+  #SBATCH -c 4
+  #SBATCH -N 1
 
-python_bash_script: '#!/bin/bash
+  echo "Launching Python Evaluation"
+  hostname
 
-    #SBATCH --job-name=evaluateGene
-    #SBATCH -t 1:00:00
-    #SBATCH --mem 8G
-    #SBATCH -c 4
-    #SBATCH -N 1
-    echo "Launching Python Evaluation"
-    hostname
-
-    {}
-    '
+  {}

@@ -288,7 +288,7 @@ Return only the replacement assign statements. Start with the first assign state
 
     return compact_prompt, selected_indices
 
-def _clean_c880_assign_replacements(llm_text, expected_lhs):
+def _clean_c880_assign_replacements(llm_text, expected_lhs, allowed_identifiers=None):
     if not llm_text:
         raise ValueError("No assign replacements received from the LLM.")
 
@@ -308,6 +308,18 @@ def _clean_c880_assign_replacements(llm_text, expected_lhs):
             "Assign replacements must preserve left-hand-side names and order. "
             f"Expected {expected_lhs}, got {assignments}."
         )
+
+    if allowed_identifiers is not None:
+        allowed_identifiers = set(allowed_identifiers)
+        for line in normalized_lines:
+            identifiers = set(re.findall(r"\b[A-Za-z_]\w*\b", line))
+            identifiers.discard("assign")
+            unknown = sorted(identifiers - allowed_identifiers)
+            if unknown:
+                raise ValueError(
+                    "Assign replacements introduced out-of-window or undefined signal names: "
+                    f"{unknown}. Allowed local signals are {sorted(allowed_identifiers)}."
+                )
 
     return normalized_lines
 
@@ -376,6 +388,10 @@ def generate_augmented_code(txt2llm, augment_idx, apply_quality_control, top_p, 
             re.match(r"\s*assign\s+([A-Za-z_]\w*)\s*=", base_lines[idx]).group(1)
             for idx in selected_assign_indices
         ]
+        selected_identifiers = set()
+        for idx in selected_assign_indices:
+            selected_identifiers.update(re.findall(r"\b[A-Za-z_]\w*\b", base_lines[idx]))
+        selected_identifiers.discard("assign")
         print(
             "Using compact C880 partial mutation prompt with "
             f"{len(selected_assign_indices)} assign statements.",
@@ -384,6 +400,7 @@ def generate_augmented_code(txt2llm, augment_idx, apply_quality_control, top_p, 
     else:
         selected_assign_indices = None
         selected_lhs = None
+        selected_identifiers = None
 
     box_print("PROMPT TO LLM", print_bbox_len=60, new_line_end=False)
 
@@ -437,7 +454,11 @@ def generate_augmented_code(txt2llm, augment_idx, apply_quality_control, top_p, 
 
         try:
             if selected_assign_indices is not None:
-                replacement_lines = _clean_c880_assign_replacements(code_from_llm, selected_lhs)
+                replacement_lines = _clean_c880_assign_replacements(
+                    code_from_llm,
+                    selected_lhs,
+                    allowed_identifiers=selected_identifiers,
+                )
                 cleaned_code = _stitch_c880_assign_replacements(
                     base_code,
                     selected_assign_indices,

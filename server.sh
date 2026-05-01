@@ -4,7 +4,6 @@
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:2
 #SBATCH -G 2
-#SBATCH -C "A100-80GB|H100|H200"
 #SBATCH --mem 160G
 #SBATCH -c 16
 echo "launching LLM Server"
