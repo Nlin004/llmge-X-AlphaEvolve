@@ -378,6 +378,7 @@ def _clean_c880_assign_replacements(
     expected_lhs,
     allowed_identifiers=None,
     required_lhs=None,
+    original_assignments=None,
 ):
     if not llm_text:
         raise ValueError("No assign replacements received from the LLM.")
@@ -403,12 +404,26 @@ def _clean_c880_assign_replacements(
         raise ValueError(f"Assign replacements duplicate left-hand-side names: {duplicate_lhs}.")
 
     if required_lhs is not None:
-        missing_required = sorted(set(required_lhs) - set(assignments))
+        missing_required = [lhs for lhs in expected_lhs if lhs in set(required_lhs) and lhs not in set(assignments)]
         if missing_required:
-            raise ValueError(
-                "Assign replacements removed signals still required downstream: "
-                f"{missing_required}."
-            )
+            if original_assignments is None:
+                raise ValueError(
+                    "Assign replacements removed signals still required downstream: "
+                    f"{missing_required}."
+                )
+            restored = []
+            for lhs in missing_required:
+                original_line = original_assignments.get(lhs)
+                if original_line:
+                    restored.append("    " + " ".join(original_line.split()))
+            if restored:
+                print(
+                    "Restoring downstream-required assignments omitted by LLM: "
+                    f"{missing_required}",
+                    flush=True,
+                )
+                normalized_lines.extend(restored)
+                assignments.extend(missing_required)
 
     if allowed_identifiers is not None:
         allowed_identifiers = set(allowed_identifiers)
@@ -488,6 +503,10 @@ def generate_augmented_code(txt2llm, augment_idx, apply_quality_control, top_p, 
             re.match(r"\s*assign\s+([A-Za-z_]\w*)\s*=", base_lines[idx]).group(1)
             for idx in selected_assign_indices
         ]
+        original_selected_assignments = {
+            lhs: base_lines[idx].strip()
+            for lhs, idx in zip(selected_lhs, selected_assign_indices)
+        }
         selected_identifiers = set()
         for idx in selected_assign_indices:
             selected_identifiers.update(re.findall(r"\b[A-Za-z_]\w*\b", base_lines[idx]))
@@ -507,6 +526,7 @@ def generate_augmented_code(txt2llm, augment_idx, apply_quality_control, top_p, 
         selected_lhs = None
         selected_identifiers = None
         required_selected_lhs = None
+        original_selected_assignments = None
 
     box_print("PROMPT TO LLM", print_bbox_len=60, new_line_end=False)
 
@@ -565,6 +585,7 @@ def generate_augmented_code(txt2llm, augment_idx, apply_quality_control, top_p, 
                     selected_lhs,
                     allowed_identifiers=selected_identifiers,
                     required_lhs=required_selected_lhs,
+                    original_assignments=original_selected_assignments,
                 )
                 cleaned_code = _stitch_c880_assign_replacements(
                     base_code,
