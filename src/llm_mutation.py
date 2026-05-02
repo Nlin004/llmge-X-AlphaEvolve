@@ -11,7 +11,8 @@ from pathlib import Path
 from llm_utils import (split_file, submit_mixtral, submit_mixtral_hf,
                        llm_code_qc, str2bool, generate_augmented_code, 
                        extract_note, clean_code_from_llm, retrieve_base_code,
-                       validate_augmented_file, is_valid_python)
+                       validate_augmented_file, is_valid_python,
+                       safe_prompt_format)
 
 
 def select_augment_idx(parts):
@@ -36,7 +37,7 @@ def augment_network(input_filename='network.py', output_filename='network_x.py',
     with open(fname, 'r') as file:
         template_txt = file.read()
     # add code to be augmented 
-    txt2llm = template_txt.format(code2llm.strip())
+    txt2llm = safe_prompt_format(template_txt, code2llm.strip())
     code_from_llm = generate_augmented_code(
         txt2llm,
         augment_idx-1,

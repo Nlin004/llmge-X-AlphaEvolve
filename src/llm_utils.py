@@ -23,6 +23,19 @@ from google import genai
 from google.genai import types
 
 
+def safe_prompt_format(template_text, *values):
+    """
+    Fill only bare '{}' prompt placeholders. Literal braces in prompt examples
+    must not be interpreted as Python str.format fields.
+    """
+    formatted = template_text
+    for value in values:
+        if "{}" not in formatted:
+            raise ValueError("Prompt template has fewer '{}' placeholders than expected.")
+        formatted = formatted.replace("{}", str(value), 1)
+    return formatted
+
+
 C880_INPUT_PORTS = (
     "N1", "N8", "N13", "N17", "N26", "N29", "N36", "N42", "N51", "N55",
     "N59", "N68", "N72", "N73", "N74", "N75", "N80", "N85", "N86", "N87",
@@ -639,7 +652,7 @@ def llm_code_qc(code_from_llm, base_code, generate_text):
     with open(template_path, 'r') as file:
         template_txt = file.read()
     # add code to be augmented
-    prompt2llm = template_txt.format(code_from_llm, base_code)
+    prompt2llm = safe_prompt_format(template_txt, code_from_llm, base_code)
     print("="*120);print(prompt2llm);print("="*120)
     
     if generate_text is None:
@@ -665,7 +678,7 @@ def llm_code_qc_hf(code_from_llm, base_code, generate_text=None):
     with open(template_path, 'r') as file:
         template_txt = file.read()
     # add code to be augmented
-    prompt2llm = template_txt.format(code_from_llm, base_code)
+    prompt2llm = safe_prompt_format(template_txt, code_from_llm, base_code)
     box_print("QC PROMPT TO LLM", print_bbox_len=120, new_line_end=False)
     print(prompt2llm)
     
