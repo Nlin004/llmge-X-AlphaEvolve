@@ -157,9 +157,41 @@ def estimate_ppa(verilog_file):
 
     # Delay: count assign statements — each is one combinational level;
     # fewer assigns means a shallower or more merged dependency chain
-    delay = len(re.findall(r'\bassign\b', content))
+    assignments = re.findall(r'\bassign\s+(N\d+)\s*=\s*([^;]+);', content, flags=re.DOTALL)
+    assign_map = {lhs: rhs for lhs, rhs in assignments}
+
+    def expression_cost(rhs):
+        return len(re.findall(r'[&|~]', rhs)) or 1
+
+    memo = {}
+    visiting = set()
+
+    def signal_depth(signal):
+        if signal in memo:
+            return memo[signal]
+        if signal in visiting:
+            return 9999
+        rhs = assign_map.get(signal)
+        if rhs is None:
+            memo[signal] = 0
+            return 0
+
+        visiting.add(signal)
+        deps = re.findall(r'\bN\d+\b', rhs)
+        dep_depth = max((signal_depth(dep) for dep in deps), default=0)
+        visiting.remove(signal)
+
+        memo[signal] = dep_depth + expression_cost(rhs)
+        return memo[signal]
+
+    header_match = re.search(r'module\s+c880_impl\s*\((.*?)\)\s*;', content, flags=re.DOTALL)
+    output_names = []
+    if header_match:
+        output_section = header_match.group(1).split('output', 1)[-1]
+        output_names = re.findall(r'\bN\d+\b', output_section)
+    delay = max((signal_depth(signal) for signal in output_names), default=0)
     if delay == 0:
-        delay = 10  # baseline for fully flattened logic
+        delay = max((signal_depth(lhs) for lhs in assign_map), default=10)
 
     return area, delay
 
@@ -208,6 +240,10 @@ def main():
             total_bits = int(bit_error_match.group(2))
             fitness_correctness = bit_errors / total_bits if total_bits else 1.0
             area, delay = estimate_ppa(design_file)
+            if fitness_correctness > 0.0:
+                soft_correctness_penalty = int(fitness_correctness * 1000)
+                area += soft_correctness_penalty
+                delay += soft_correctness_penalty
         if "RESULT: PASS" in res:
             print(f"[SUCCESS] Correct logic! Area: {area}, Delay: {delay}")
         else:

@@ -106,6 +106,49 @@ def validate_c880_verilog_contract(code_text):
 
     return True
 
+def validate_c880_signal_closure(code_text):
+    """Reject C880 variants with duplicate, undeclared, or undriven signals."""
+    if "module c880_impl" not in code_text:
+        return True
+
+    declared = set(C880_PORTS)
+    for wire_group in re.findall(r"\bwire\b\s+([^;]+);", code_text, flags=re.DOTALL):
+        declared.update(re.findall(r"\bN\d+\b", wire_group))
+
+    lhs_signals = re.findall(r"\bassign\s+(N\d+)\s*=", code_text)
+    assigned = set(lhs_signals)
+    duplicates = sorted({signal for signal in lhs_signals if lhs_signals.count(signal) > 1}, key=lambda name: int(name[1:]))
+    if duplicates:
+        raise ValueError(f"Candidate assigns the same C880 signal more than once: {duplicates[:12]}")
+
+    unknown_lhs = sorted(assigned - declared, key=lambda name: int(name[1:]))
+    if unknown_lhs:
+        raise ValueError(f"Candidate assigns undeclared C880 signals: {unknown_lhs[:12]}")
+
+    referenced = set()
+    for rhs in re.findall(r"\bassign\s+N\d+\s*=\s*([^;]+);", code_text, flags=re.DOTALL):
+        referenced.update(re.findall(r"\bN\d+\b", rhs))
+
+    unknown_refs = sorted(referenced - declared, key=lambda name: int(name[1:]))
+    if unknown_refs:
+        raise ValueError(f"Candidate references undeclared C880 signals: {unknown_refs[:12]}")
+
+    undriven_refs = sorted(
+        referenced - set(C880_INPUT_PORTS) - assigned,
+        key=lambda name: int(name[1:]),
+    )
+    if undriven_refs:
+        raise ValueError(f"Candidate references undriven C880 signals: {undriven_refs[:12]}")
+
+    undriven_outputs = sorted(
+        set(C880_OUTPUT_PORTS) - assigned,
+        key=lambda name: int(name[1:]),
+    )
+    if undriven_outputs:
+        raise ValueError(f"Candidate leaves output ports undriven: {undriven_outputs[:12]}")
+
+    return True
+
 
 def validate_candidate_block(candidate_code, base_code):
     """
@@ -124,6 +167,7 @@ def validate_candidate_block(candidate_code, base_code):
         if "module c880_impl" not in candidate_code:
             raise ValueError("Candidate generate_seed_verilog block no longer contains the c880_impl module.")
         validate_c880_verilog_contract(candidate_code)
+        validate_c880_signal_closure(candidate_code)
 
         # The mutation target for C880 should remain a pure definition block,
         # not an executable script that runs arbitrary code during import.
@@ -168,6 +212,7 @@ def validate_augmented_file(full_code_text):
     if "module c880_impl" not in full_code_text:
         raise ValueError("Full candidate file is missing the c880_impl Verilog payload.")
     validate_c880_verilog_contract(full_code_text)
+    validate_c880_signal_closure(full_code_text)
 
     return True
 
@@ -262,29 +307,45 @@ def _build_c880_partial_mutation_prompt(base_code, source_prompt):
     if not assign_indices:
         return None
 
-    window_size = max(1, _env_int("C880_LLM_ASSIGN_WINDOW", 12))
+    window_size = max(1, _env_int("C880_LLM_ASSIGN_WINDOW", 72))
     window_size = min(window_size, len(assign_indices))
     start = np.random.randint(0, len(assign_indices) - window_size + 1)
     selected_indices = assign_indices[start:start + window_size]
     lines = base_code.splitlines()
     selected_assigns = "\n".join(lines[idx].strip() for idx in selected_indices)
+    selected_lhs = [
+        re.match(r"\s*assign\s+([A-Za-z_]\w*)\s*=", lines[idx]).group(1)
+        for idx in selected_indices
+    ]
     allowed_signals = sorted({
         token
         for token in re.findall(r"\b[A-Za-z_]\w*\b", selected_assigns)
         if token != "assign"
     }, key=lambda name: (not name.startswith("N"), name))
+    selected_lhs_set = set(selected_lhs)
+    outside_text = "\n".join(
+        line for idx, line in enumerate(lines)
+        if idx < selected_indices[0] or idx > selected_indices[-1]
+    )
+    externally_required_lhs = sorted(
+        selected_lhs_set & set(re.findall(r"\bN\d+\b", outside_text)),
+        key=lambda name: int(name[1:]),
+    )
 
     prompt_hint = source_prompt.split("```python", 1)[0].strip()
     compact_prompt = f"""
 You are mutating a small part of the ISCAS-85 C880 Verilog implementation for evolutionary search.
 
-Keep this a local edit. Return exactly {len(selected_indices)} Verilog assign statements, in the same order, with the same left-hand-side signal names shown below. You may simplify or locally vary only the right-hand side expressions. Do not add wires, modules, ports, comments, prose, markdown, Python, always blocks, buses, clocks, or resets.
+Keep this a local edit. Return between 1 and {len(selected_indices)} Verilog assign statements replacing the selected block below. You may remove redundant assignments or rewrite right-hand side expressions when doing so preserves correctness. Do not add wires, modules, ports, comments, prose, markdown, Python, always blocks, buses, clocks, or resets.
 
 Hard signal-name rule:
 - Use only these signal names: {", ".join(allowed_signals)}
+- The only left-hand-side names you may assign are: {", ".join(selected_lhs)}
+- These downstream-required left-hand-side names must still be assigned exactly once: {", ".join(externally_required_lhs) if externally_required_lhs else "(none)"}
 - Do not invent adjacent-number signal names such as N320 when only N319 is shown.
-- Do not rename any left-hand side.
+- Do not assign the same left-hand-side name more than once.
 - If you are uncertain about an assignment, copy that assignment unchanged.
+Primary goal: preserve exact functional correctness. Secondary goal: reduce area and dependency depth by removing redundant assign statements or simplifying local Boolean expressions.
 
 Original guidance:
 {prompt_hint}
@@ -299,7 +360,12 @@ Return only the replacement assign statements. Start with the first assign state
 
     return compact_prompt, selected_indices
 
-def _clean_c880_assign_replacements(llm_text, expected_lhs, allowed_identifiers=None):
+def _clean_c880_assign_replacements(
+    llm_text,
+    expected_lhs,
+    allowed_identifiers=None,
+    required_lhs=None,
+):
     if not llm_text:
         raise ValueError("No assign replacements received from the LLM.")
 
@@ -309,16 +375,27 @@ def _clean_c880_assign_replacements(llm_text, expected_lhs, allowed_identifiers=
     assign_lines = re.findall(r"\bassign\s+[A-Za-z_]\w*\s*=\s*[^;]+;", candidate, flags=re.DOTALL)
 
     normalized_lines = ["    " + " ".join(line.split()) for line in assign_lines]
-    if len(normalized_lines) != len(expected_lhs):
-        raise ValueError(
-            f"Expected {len(expected_lhs)} assign replacements, got {len(normalized_lines)}."
-        )
+    if not normalized_lines:
+        raise ValueError("Expected at least one assign replacement.")
 
-    if assignments != expected_lhs:
+    expected_lhs_set = set(expected_lhs)
+    unexpected_lhs = sorted(set(assignments) - expected_lhs_set)
+    if unexpected_lhs:
         raise ValueError(
-            "Assign replacements must preserve left-hand-side names and order. "
-            f"Expected {expected_lhs}, got {assignments}."
+            "Assign replacements used left-hand-side names outside the selected block: "
+            f"{unexpected_lhs}."
         )
+    duplicate_lhs = sorted({lhs for lhs in assignments if assignments.count(lhs) > 1})
+    if duplicate_lhs:
+        raise ValueError(f"Assign replacements duplicate left-hand-side names: {duplicate_lhs}.")
+
+    if required_lhs is not None:
+        missing_required = sorted(set(required_lhs) - set(assignments))
+        if missing_required:
+            raise ValueError(
+                "Assign replacements removed signals still required downstream: "
+                f"{missing_required}."
+            )
 
     if allowed_identifiers is not None:
         allowed_identifiers = set(allowed_identifiers)
@@ -336,8 +413,7 @@ def _clean_c880_assign_replacements(llm_text, expected_lhs, allowed_identifiers=
 
 def _stitch_c880_assign_replacements(base_code, selected_indices, replacement_lines):
     lines = base_code.splitlines()
-    for line_idx, replacement in zip(selected_indices, replacement_lines):
-        lines[line_idx] = replacement
+    lines = lines[:selected_indices[0]] + replacement_lines + lines[selected_indices[-1] + 1:]
     return "\n".join(lines) + ("\n" if base_code.endswith("\n") else "")
 
 
@@ -403,6 +479,11 @@ def generate_augmented_code(txt2llm, augment_idx, apply_quality_control, top_p, 
         for idx in selected_assign_indices:
             selected_identifiers.update(re.findall(r"\b[A-Za-z_]\w*\b", base_lines[idx]))
         selected_identifiers.discard("assign")
+        outside_text = "\n".join(
+            line for idx, line in enumerate(base_lines)
+            if idx < selected_assign_indices[0] or idx > selected_assign_indices[-1]
+        )
+        required_selected_lhs = set(selected_lhs) & set(re.findall(r"\bN\d+\b", outside_text))
         print(
             "Using compact C880 partial mutation prompt with "
             f"{len(selected_assign_indices)} assign statements.",
@@ -412,6 +493,7 @@ def generate_augmented_code(txt2llm, augment_idx, apply_quality_control, top_p, 
         selected_assign_indices = None
         selected_lhs = None
         selected_identifiers = None
+        required_selected_lhs = None
 
     box_print("PROMPT TO LLM", print_bbox_len=60, new_line_end=False)
 
@@ -469,6 +551,7 @@ def generate_augmented_code(txt2llm, augment_idx, apply_quality_control, top_p, 
                     code_from_llm,
                     selected_lhs,
                     allowed_identifiers=selected_identifiers,
+                    required_lhs=required_selected_lhs,
                 )
                 cleaned_code = _stitch_c880_assign_replacements(
                     base_code,
