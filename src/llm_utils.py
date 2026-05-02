@@ -946,6 +946,8 @@ def submit_gemini_api(txt2gemini, **kwargs):
     return response.text
 
 def mutate_prompts(n=5):
+    if not _env_flag("LLM_MUTATE_PROMPTS", False):
+        return
     template_paths = glob.glob(os.path.join(get_template_root(), 'FixedPrompts', '*', '*.txt'))
     if len(template_paths) == 0:
         return
@@ -966,7 +968,11 @@ def mutate_prompts(n=5):
             llm_code_generator = submit_gemini_api
         elif LLM_MODEL == 'deepseek':
             llm_code_generator = submit_deepseek_local
-        output = llm_code_generator(prompt, temperature=temp).strip()
+        output = llm_code_generator(prompt, temperature=temp)
+        if not output:
+            print(f"Skipping prompt mutation for {template}: LLM returned no output.", flush=True)
+            continue
+        output = output.strip()
         if "```" in output:
             output = output.split("```")[0]
         output = output + "\n```python\n{}\n```"
